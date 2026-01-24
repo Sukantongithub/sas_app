@@ -20,9 +20,13 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['admin', 'teacher', 'student'],
+    enum: ['super_admin', 'admin', 'faculty', 'student'],
     default: 'student',
     required: true
+  },
+  departmentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Department'
   },
   studentId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -32,6 +36,10 @@ const userSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  isDeleted: {
+    type: Boolean,
+    default: false
   },
   lastLogin: {
     type: Date

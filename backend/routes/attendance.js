@@ -2,9 +2,10 @@ const express = require('express');
 const router = express.Router();
 const Attendance = require('../models/Attendance');
 const Student = require('../models/Student');
+const { requireAuth, requireRoles, requireSelfOrRoles } = require('../middleware/auth');
 
 // Get all attendance records
-router.get('/', async (req, res) => {
+router.get('/', requireAuth, requireRoles('super_admin', 'admin', 'faculty'), async (req, res) => {
   try {
     const { date, studentId } = req.query;
     let query = {};
@@ -23,7 +24,7 @@ router.get('/', async (req, res) => {
 });
 
 // Get today's attendance
-router.get('/today', async (req, res) => {
+router.get('/today', requireAuth, requireRoles('super_admin', 'admin', 'faculty'), async (req, res) => {
   try {
     const today = new Date().toISOString().split('T')[0];
     const records = await Attendance.find({ date: today })
@@ -37,7 +38,7 @@ router.get('/today', async (req, res) => {
 });
 
 // Get student's attendance history
-router.get('/student/:studentId', async (req, res) => {
+router.get('/student/:studentId', requireAuth, requireSelfOrRoles({ roles: ['super_admin', 'admin', 'faculty'] }), async (req, res) => {
   try {
     const records = await Attendance.find({ studentId: req.params.studentId })
       .sort({ date: -1 });
@@ -65,7 +66,7 @@ router.get('/student/:studentId', async (req, res) => {
 });
 
 // Mark attendance (create or update)
-router.post('/', async (req, res) => {
+router.post('/', requireAuth, requireRoles('super_admin', 'admin', 'faculty'), async (req, res) => {
   try {
     const { studentId, date, status, remarks } = req.body;
 
@@ -102,7 +103,7 @@ router.post('/', async (req, res) => {
 });
 
 // Mark attendance for multiple students
-router.post('/bulk', async (req, res) => {
+router.post('/bulk', requireAuth, requireRoles('super_admin', 'admin', 'faculty'), async (req, res) => {
   try {
     const { records } = req.body; // Array of { studentId, date, status, remarks }
     
@@ -136,7 +137,7 @@ router.post('/bulk', async (req, res) => {
 });
 
 // Delete attendance record
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAuth, requireRoles('super_admin', 'admin'), async (req, res) => {
   try {
     const attendance = await Attendance.findById(req.params.id);
     if (!attendance) {
@@ -151,7 +152,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // Get attendance statistics for all students
-router.get('/stats/all', async (req, res) => {
+router.get('/stats/all', requireAuth, requireRoles('super_admin', 'admin', 'faculty'), async (req, res) => {
   try {
     const students = await Student.find();
     

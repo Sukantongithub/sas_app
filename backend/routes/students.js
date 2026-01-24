@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const Student = require('../models/Student');
+const { requireAuth, requireRoles } = require('../middleware/auth');
 
 // Get all students
-router.get('/', async (req, res) => {
+router.get('/', requireAuth, requireRoles('super_admin', 'admin', 'faculty'), async (req, res) => {
   try {
     const students = await Student.find().sort({ createdAt: -1 });
     res.json(students);
@@ -13,7 +14,7 @@ router.get('/', async (req, res) => {
 });
 
 // Get single student
-router.get('/:id', async (req, res) => {
+router.get('/:id', requireAuth, requireRoles('super_admin', 'admin', 'faculty'), async (req, res) => {
   try {
     const student = await Student.findById(req.params.id);
     if (!student) {
@@ -26,7 +27,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // Create student
-router.post('/', async (req, res) => {
+router.post('/', requireAuth, requireRoles('super_admin', 'admin', 'faculty'), async (req, res) => {
   const student = new Student({
     name: req.body.name,
     rollNumber: req.body.rollNumber,
@@ -48,7 +49,7 @@ router.post('/', async (req, res) => {
 });
 
 // Update student
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireAuth, requireRoles('super_admin', 'admin', 'faculty'), async (req, res) => {
   try {
     const student = await Student.findById(req.params.id);
     if (!student) {
@@ -69,7 +70,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // Delete student
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAuth, requireRoles('super_admin', 'admin'), async (req, res) => {
   try {
     const student = await Student.findById(req.params.id);
     if (!student) {

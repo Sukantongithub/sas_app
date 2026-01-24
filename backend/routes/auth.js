@@ -1,7 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
+const { body } = require('express-validator');
 const User = require('../models/User');
+const { requireAuth, requireRoles } = require('../middleware/auth');
+const { validateRequest } = require('../middleware/validate');
 
 // Generate JWT token
 const generateToken = (userId) => {
@@ -12,46 +15,21 @@ const generateToken = (userId) => {
   );
 };
 
-// Verify JWT token middleware
-const verifyToken = (req, res, next) => {
-  const token = req.headers.authorization?.replace('Bearer ', '') || req.body.token;
-  
-  if (!token) {
-    return res.status(401).json({ message: 'No token provided' });
-  }
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.userId = decoded.userId;
-    req.token = token;
-    next();
-  } catch (error) {
-    if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({ message: 'Token expired' });
-    }
-    return res.status(401).json({ message: 'Invalid token' });
-  }
-};
-
 // Register new user
-router.post('/register', async (req, res) => {
+router.post('/register',
+  [
+    body('name').notEmpty().withMessage('Name is required'),
+    body('email').isEmail().withMessage('Valid email is required'),
+    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+    body('role').optional().isIn(['super_admin', 'admin', 'faculty', 'student']).withMessage('Invalid role'),
+  ],
+  validateRequest,
+  async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
 
-    // Validate required fields
-    if (!name || !email || !password) {
-      return res.status(400).json({ message: 'Name, email, and password are required' });
-    }
-
-    // Validate password length before hashing
-    if (password.length < 6) {
-      return res.status(400).json({ message: 'Password must be at least 6 characters' });
-    }
-
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ message: 'Invalid email format' });
+    if (role && role !== 'student') {
+      return res.status(403).json({ message: 'Only admins can create privileged roles' });
     }
 
     // Check if user already exists
@@ -65,7 +43,7 @@ router.post('/register', async (req, res) => {
       name,
       email,
       password,
-      role: role || 'student'
+      role: 'student'
     });
 
     await user.save();
@@ -99,7 +77,13 @@ router.post('/register', async (req, res) => {
 });
 
 // Login
-router.post('/login', async (req, res) => {
+router.post('/login',
+  [
+    body('email').isEmail().withMessage('Valid email is required'),
+    body('password').notEmpty().withMessage('Password is required'),
+  ],
+  validateRequest,
+  async (req, res) => {
   try {
     const { email, password } = req.body;
     console.log('Login attempt for email:', email);
@@ -155,29 +139,17 @@ router.post('/login', async (req, res) => {
 });
 
 // Verify JWT token (check if token is valid)
-router.post('/verify', verifyToken, async (req, res) => {
+router.post('/verify', requireAuth, async (req, res) => {
   try {
-    // Token already verified by middleware, get user
-    const user = await User.findById(req.userId).populate('studentId');
-    
-    if (!user) {
-      return res.status(401).json({ message: 'User not found' });
-    }
-
-    // Check if user is active
-    if (!user.isActive) {
-      return res.status(403).json({ message: 'Account is disabled' });
-    }
-
     res.json({
       valid: true,
       user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        studentId: user.studentId,
-        lastLogin: user.lastLogin
+        id: req.user._id,
+        name: req.user.name,
+        email: req.user.email,
+        role: req.user.role,
+        studentId: req.user.studentId,
+        lastLogin: req.user.lastLogin
       }
     });
   } catch (error) {
@@ -187,22 +159,8 @@ router.post('/verify', verifyToken, async (req, res) => {
 });
 
 // Logout (JWT is stateless; client removes token. We accept missing/invalid token and always return success.)
-router.post('/logout', async (req, res) => {
+router.post('/logout', requireAuth, async (req, res) => {
   try {
-    const token = req.headers.authorization?.replace('Bearer ', '') || req.body.token;
-
-    if (token) {
-      try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        console.log('Logout request for user ID:', decoded.userId);
-      } catch (err) {
-        console.log('Logout with invalid/expired token');
-      }
-    } else {
-      console.log('Logout with no token provided');
-    }
-
-    // Always succeed; client-side removal is the real logout
     res.json({ message: 'Logged out successfully', success: true });
   } catch (error) {
     console.error('Logout error:', error);
@@ -211,21 +169,15 @@ router.post('/logout', async (req, res) => {
 });
 
 // Get current user info
-router.get('/me', verifyToken, async (req, res) => {
+router.get('/me', requireAuth, async (req, res) => {
   try {
-    const user = await User.findById(req.userId).populate('studentId');
-
-    if (!user) {
-      return res.status(401).json({ message: 'User not found' });
-    }
-
     res.json({
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      studentId: user.studentId,
-      lastLogin: user.lastLogin
+      id: req.user._id,
+      name: req.user.name,
+      email: req.user.email,
+      role: req.user.role,
+      studentId: req.user.studentId,
+      lastLogin: req.user.lastLogin
     });
   } catch (error) {
     console.error('Get me error:', error);
@@ -234,7 +186,7 @@ router.get('/me', verifyToken, async (req, res) => {
 });
 
 // Get all users (admin only)
-router.get('/users', async (req, res) => {
+router.get('/users', requireAuth, requireRoles('super_admin', 'admin'), async (req, res) => {
   try {
     const users = await User.find().populate('studentId').select('-password');
     res.json(users);
@@ -244,7 +196,12 @@ router.get('/users', async (req, res) => {
 });
 
 // Update user role (admin only)
-router.put('/users/:id/role', async (req, res) => {
+router.put('/users/:id/role',
+  requireAuth,
+  requireRoles('super_admin', 'admin'),
+  [body('role').isIn(['super_admin', 'admin', 'faculty', 'student']).withMessage('Invalid role')],
+  validateRequest,
+  async (req, res) => {
   try {
     const { role } = req.body;
     const user = await User.findByIdAndUpdate(
@@ -264,7 +221,7 @@ router.put('/users/:id/role', async (req, res) => {
 });
 
 // Delete user (admin only)
-router.delete('/users/:id', async (req, res) => {
+router.delete('/users/:id', requireAuth, requireRoles('super_admin', 'admin'), async (req, res) => {
   try {
     const user = await User.findByIdAndDelete(req.params.id);
     
