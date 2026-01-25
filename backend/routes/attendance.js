@@ -5,7 +5,7 @@ const Student = require('../models/Student');
 const { requireAuth, requireRoles, requireSelfOrRoles } = require('../middleware/auth');
 
 // Get all attendance records
-router.get('/', requireAuth, requireRoles('super_admin', 'admin', 'faculty'), async (req, res) => {
+router.get('/', requireAuth, requireRoles('super_admin', 'admin', 'faculty', 'teacher'), async (req, res) => {
   try {
     const { date, studentId } = req.query;
     let query = {};
@@ -24,7 +24,7 @@ router.get('/', requireAuth, requireRoles('super_admin', 'admin', 'faculty'), as
 });
 
 // Get today's attendance
-router.get('/today', requireAuth, requireRoles('super_admin', 'admin', 'faculty'), async (req, res) => {
+router.get('/today', requireAuth, requireRoles('super_admin', 'admin', 'faculty', 'teacher'), async (req, res) => {
   try {
     const today = new Date().toISOString().split('T')[0];
     const records = await Attendance.find({ date: today })
@@ -38,7 +38,7 @@ router.get('/today', requireAuth, requireRoles('super_admin', 'admin', 'faculty'
 });
 
 // Get student's attendance history
-router.get('/student/:studentId', requireAuth, requireSelfOrRoles({ roles: ['super_admin', 'admin', 'faculty'] }), async (req, res) => {
+router.get('/student/:studentId', requireAuth, requireSelfOrRoles({ roles: ['super_admin', 'admin', 'faculty', 'teacher'] }), async (req, res) => {
   try {
     const records = await Attendance.find({ studentId: req.params.studentId })
       .sort({ date: -1 });
@@ -66,7 +66,7 @@ router.get('/student/:studentId', requireAuth, requireSelfOrRoles({ roles: ['sup
 });
 
 // Mark attendance (create or update)
-router.post('/', requireAuth, requireRoles('super_admin', 'admin', 'faculty'), async (req, res) => {
+router.post('/', requireAuth, requireRoles('super_admin', 'admin', 'faculty', 'teacher'), async (req, res) => {
   try {
     const { studentId, date, status, remarks } = req.body;
 
@@ -103,7 +103,7 @@ router.post('/', requireAuth, requireRoles('super_admin', 'admin', 'faculty'), a
 });
 
 // Mark attendance for multiple students
-router.post('/bulk', requireAuth, requireRoles('super_admin', 'admin', 'faculty'), async (req, res) => {
+router.post('/bulk', requireAuth, requireRoles('super_admin', 'admin', 'faculty', 'teacher'), async (req, res) => {
   try {
     const { records } = req.body; // Array of { studentId, date, status, remarks }
     

@@ -6,6 +6,10 @@ const API_BASE_URL = 'http://localhost:5000/api';
 // For iOS Simulator use: http://localhost:5000/api
 // For Physical Device use: http://YOUR_IP_ADDRESS:5000/api
 
+const authHeaders = (token?: string) => (
+  token ? { Authorization: `Bearer ${token}` } : {}
+);
+
 const handleResponse = async (response: Response) => {
   const text = await response.text();
   let data;
@@ -47,41 +51,54 @@ const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeout 
 
 // Students API
 export const studentsAPI = {
-  getAll: async () => {
-    const response = await fetchWithTimeout(`${API_BASE_URL}/students`);
+  getAll: async (token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/students`, {
+      headers: {
+        ...authHeaders(token),
+      },
+    });
     return handleResponse(response);
   },
 
-  getById: async (id: string) => {
-    const response = await fetchWithTimeout(`${API_BASE_URL}/students/${id}`);
+  getById: async (id: string, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/students/${id}`, {
+      headers: {
+        ...authHeaders(token),
+      },
+    });
     return handleResponse(response);
   },
 
-  create: async (studentData: any) => {
+  create: async (studentData: any, token?: string) => {
     const response = await fetchWithTimeout(`${API_BASE_URL}/students`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...authHeaders(token),
       },
       body: JSON.stringify(studentData),
     });
     return handleResponse(response);
   },
 
-  update: async (id: string, studentData: any) => {
+  update: async (id: string, studentData: any, token?: string) => {
     const response = await fetchWithTimeout(`${API_BASE_URL}/students/${id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
+        ...authHeaders(token),
       },
       body: JSON.stringify(studentData),
     });
     return handleResponse(response);
   },
 
-  delete: async (id: string) => {
+  delete: async (id: string, token?: string) => {
     const response = await fetchWithTimeout(`${API_BASE_URL}/students/${id}`, {
       method: 'DELETE',
+      headers: {
+        ...authHeaders(token),
+      },
     });
     return handleResponse(response);
   },
@@ -89,7 +106,7 @@ export const studentsAPI = {
 
 // Attendance API
 export const attendanceAPI = {
-  getAll: async (params?: { date?: string; studentId?: string }) => {
+  getAll: async (params?: { date?: string; studentId?: string }, token?: string) => {
     const queryParams = new URLSearchParams();
     if (params?.date) queryParams.append('date', params.date);
     if (params?.studentId) queryParams.append('studentId', params.studentId);
@@ -98,17 +115,29 @@ export const attendanceAPI = {
       ? `${API_BASE_URL}/attendance?${queryParams}`
       : `${API_BASE_URL}/attendance`;
     
-    const response = await fetchWithTimeout(url);
+    const response = await fetchWithTimeout(url, {
+      headers: {
+        ...authHeaders(token),
+      },
+    });
     return handleResponse(response);
   },
 
-  getToday: async () => {
-    const response = await fetchWithTimeout(`${API_BASE_URL}/attendance/today`);
+  getToday: async (token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/attendance/today`, {
+      headers: {
+        ...authHeaders(token),
+      },
+    });
     return handleResponse(response);
   },
 
-  getByStudent: async (studentId: string) => {
-    const response = await fetchWithTimeout(`${API_BASE_URL}/attendance/student/${studentId}`);
+  getByStudent: async (studentId: string, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/attendance/student/${studentId}`, {
+      headers: {
+        ...authHeaders(token),
+      },
+    });
     return handleResponse(response);
   },
 
@@ -117,11 +146,12 @@ export const attendanceAPI = {
     date: string;
     status: 'present' | 'absent' | 'late';
     remarks?: string;
-  }) => {
+  }, token?: string) => {
     const response = await fetchWithTimeout(`${API_BASE_URL}/attendance`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...authHeaders(token),
       },
       body: JSON.stringify(attendanceData),
     });
@@ -133,26 +163,34 @@ export const attendanceAPI = {
     date: string;
     status: 'present' | 'absent' | 'late';
     remarks?: string;
-  }>) => {
+  }>, token?: string) => {
     const response = await fetchWithTimeout(`${API_BASE_URL}/attendance/bulk`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...authHeaders(token),
       },
       body: JSON.stringify({ records }),
     });
     return handleResponse(response);
   },
 
-  delete: async (id: string) => {
+  delete: async (id: string, token?: string) => {
     const response = await fetchWithTimeout(`${API_BASE_URL}/attendance/${id}`, {
       method: 'DELETE',
+      headers: {
+        ...authHeaders(token),
+      },
     });
     return handleResponse(response);
   },
 
-  getAllStats: async () => {
-    const response = await fetchWithTimeout(`${API_BASE_URL}/attendance/stats/all`);
+  getAllStats: async (token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/attendance/stats/all`, {
+      headers: {
+        ...authHeaders(token),
+      },
+    });
     return handleResponse(response);
   },
 };

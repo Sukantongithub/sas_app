@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Student, AttendanceRecord } from '@/types/attendance';
 import { studentsAPI, attendanceAPI } from '@/services/api';
+import { useAuth } from '@/context/AuthContext';
 
 interface AttendanceContextType {
   students: Student[];
@@ -23,12 +24,19 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { token, isAuthenticated, loading: authLoading } = useAuth();
 
-  const refreshStudents = async () => {
+  const refreshStudents = React.useCallback(async () => {
     try {
+      if (!token) {
+        console.warn('AttendanceContext.refreshStudents: No token available');
+        setError('Authorization token required');
+        return;
+      }
+      console.log('AttendanceContext.refreshStudents: Token available, fetching students with token:', token.substring(0, 20) + '...');
       setLoading(true);
       setError(null);
-      const data = await studentsAPI.getAll();
+      const data = await studentsAPI.getAll(token);
       // Map MongoDB _id to id for compatibility
       const mappedData = data.map((student: any) => ({
         id: student._id,
@@ -38,6 +46,7 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
         phone: student.phone,
         class: student.class,
       }));
+      console.log('AttendanceContext.refreshStudents: Successfully fetched', mappedData.length, 'students');
       setStudents(mappedData);
     } catch (err: any) {
       setError(err.message || 'Failed to load students');
@@ -45,12 +54,18 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
 
-  const refreshAttendance = async () => {
+  const refreshAttendance = React.useCallback(async () => {
     try {
+      if (!token) {
+        console.warn('AttendanceContext.refreshAttendance: No token available');
+        setError('Authorization token required');
+        return;
+      }
+      console.log('AttendanceContext.refreshAttendance: Token available, fetching attendance with token:', token.substring(0, 20) + '...');
       setError(null);
-      const data = await attendanceAPI.getAll();
+      const data = await attendanceAPI.getAll(undefined, token);
       // Map MongoDB format to app format
       const mappedData = data.map((record: any) => ({
         id: record._id,
@@ -60,25 +75,42 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
         remarks: record.remarks,
         markedAt: record.markedAt,
       }));
+      console.log('AttendanceContext.refreshAttendance: Successfully fetched', mappedData.length, 'records');
       setAttendanceRecords(mappedData);
     } catch (err: any) {
       setError(err.message || 'Failed to load attendance records');
       console.error('Error loading attendance:', err);
     }
-  };
+  }, [token]);
 
-  // Load students on mount
+  // Load students and attendance when auth is complete and token is available
   useEffect(() => {
+    console.log('AttendanceContext.useEffect: authLoading=', authLoading, 'isAuthenticated=', isAuthenticated, 'hasToken=', !!token);
+    
+    if (authLoading) {
+      console.log('AttendanceContext: Auth still loading, waiting...');
+      return;
+    }
+
+    if (!isAuthenticated || !token) {
+      console.log('AttendanceContext: Not authenticated, clearing data');
+      setStudents([]);
+      setAttendanceRecords([]);
+      return;
+    }
+
+    console.log('AttendanceContext: Auth complete with valid token, fetching data');
     refreshStudents();
     refreshAttendance();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [authLoading, isAuthenticated, token, refreshStudents, refreshAttendance]);
 
   const addStudent = async (student: Omit<Student, 'id'>) => {
     try {
       setLoading(true);
       setError(null);
-      await studentsAPI.create(student);
+      if (!token) throw new Error('Authorization token required');
+
+      await studentsAPI.create(student, token);
       await refreshStudents();
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to add student');
@@ -92,7 +124,9 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true);
       setError(null);
-      await studentsAPI.delete(id);
+      if (!token) throw new Error('Authorization token required');
+
+      await studentsAPI.delete(id, token);
       await refreshStudents();
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to delete student');
@@ -107,12 +141,14 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
       setError(null);
       const today = new Date().toISOString().split('T')[0];
       
+      if (!token) throw new Error('Authorization token required');
+
       await attendanceAPI.mark({
         studentId,
         date: today,
         status,
         remarks,
-      });
+      }, token);
       
       await refreshAttendance();
     } catch (err: any) {

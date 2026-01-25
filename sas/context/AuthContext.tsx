@@ -30,25 +30,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadSession = async () => {
     try {
+      console.log('AuthContext.loadSession: Starting');
       const savedToken = await AsyncStorage.getItem(TOKEN_KEY);
       const savedUser = await AsyncStorage.getItem(USER_KEY);
 
+      console.log('AuthContext.loadSession: Retrieved from storage - token exists:', !!savedToken, 'user exists:', !!savedUser);
+
       if (savedToken && savedUser) {
         // Verify token is still valid
+        console.log('AuthContext.loadSession: Calling verify API');
         const response = await authAPI.verify(savedToken);
+        console.log('AuthContext.loadSession: Verify response:', response);
         
         if (response.valid) {
+          console.log('AuthContext.loadSession: Token valid, setting state');
           setToken(savedToken);
           setUser(response.user);
         } else {
+          console.log('AuthContext.loadSession: Token invalid, clearing session');
           // Token invalid, clear storage
           await clearSession();
         }
+      } else {
+        console.log('AuthContext.loadSession: No saved session');
       }
     } catch (error) {
-      console.error('Error loading session:', error);
+      console.error('AuthContext.loadSession: Error loading session:', error);
       await clearSession();
     } finally {
+      console.log('AuthContext.loadSession: Complete');
       setLoading(false);
     }
   };

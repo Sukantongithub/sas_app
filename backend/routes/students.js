@@ -4,7 +4,7 @@ const Student = require('../models/Student');
 const { requireAuth, requireRoles } = require('../middleware/auth');
 
 // Get all students
-router.get('/', requireAuth, requireRoles('super_admin', 'admin', 'faculty'), async (req, res) => {
+router.get('/', requireAuth, requireRoles('super_admin', 'admin', 'faculty', 'teacher'), async (req, res) => {
   try {
     const students = await Student.find().sort({ createdAt: -1 });
     res.json(students);
@@ -14,7 +14,7 @@ router.get('/', requireAuth, requireRoles('super_admin', 'admin', 'faculty'), as
 });
 
 // Get single student
-router.get('/:id', requireAuth, requireRoles('super_admin', 'admin', 'faculty'), async (req, res) => {
+router.get('/:id', requireAuth, requireRoles('super_admin', 'admin', 'faculty', 'teacher'), async (req, res) => {
   try {
     const student = await Student.findById(req.params.id);
     if (!student) {
@@ -27,7 +27,7 @@ router.get('/:id', requireAuth, requireRoles('super_admin', 'admin', 'faculty'),
 });
 
 // Create student
-router.post('/', requireAuth, requireRoles('super_admin', 'admin', 'faculty'), async (req, res) => {
+router.post('/', requireAuth, requireRoles('super_admin', 'admin', 'faculty', 'teacher'), async (req, res) => {
   const student = new Student({
     name: req.body.name,
     rollNumber: req.body.rollNumber,
@@ -49,7 +49,7 @@ router.post('/', requireAuth, requireRoles('super_admin', 'admin', 'faculty'), a
 });
 
 // Update student
-router.put('/:id', requireAuth, requireRoles('super_admin', 'admin', 'faculty'), async (req, res) => {
+router.put('/:id', requireAuth, requireRoles('super_admin', 'admin', 'faculty', 'teacher'), async (req, res) => {
   try {
     const student = await Student.findById(req.params.id);
     if (!student) {
