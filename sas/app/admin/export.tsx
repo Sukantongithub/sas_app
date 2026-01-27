@@ -13,6 +13,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/context/AuthContext';
+import AdminHeader from './AdminHeader';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -34,7 +35,7 @@ export default function ExportScreen() {
       type: 'students',
       label: 'Students Data',
       description: 'Export all student records',
-      icon: 'graduationcap.fill',
+      icon: 'person.2.fill',
       color: '#007AFF',
     },
     {
@@ -48,21 +49,21 @@ export default function ExportScreen() {
       type: 'attendance',
       label: 'Attendance Records',
       description: 'Export all attendance data',
-      icon: 'doc.text.fill',
+      icon: 'checkmark.circle.fill',
       color: '#4CAF50',
     },
     {
       type: 'leaves',
       label: 'Leave Requests',
       description: 'Export all leave requests',
-      icon: 'calendar.badge.clock',
+      icon: 'calendar.fill',
       color: '#ff9800',
     },
     {
       type: 'all',
       label: 'Complete Dump',
       description: 'Export all system data',
-      icon: 'tray.full.fill',
+      icon: 'arrow.down.doc.fill',
       color: '#f44336',
     },
   ];
@@ -117,9 +118,9 @@ export default function ExportScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      <AdminHeader title="Export Data" />
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
-          <ThemedText type="title">Export Data</ThemedText>
           <ThemedText style={styles.subtitle}>
             Download system data as JSON files
           </ThemedText>

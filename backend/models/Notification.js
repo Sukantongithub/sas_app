@@ -8,7 +8,7 @@ const notificationSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['attendance_marked', 'absent_alert', 'late_alert', 'leave_approved', 'leave_rejected', 'low_attendance', 'general'],
+    enum: ['attendance_marked', 'absent_alert', 'late_alert', 'leave_approved', 'leave_rejected', 'low_attendance', 'attendance_modification_request', 'sensitive_data_modification', 'general'],
     required: true
   },
   title: {

@@ -8,9 +8,12 @@ const Attendance = require('../models/Attendance');
 const Leave = require('../models/Leave');
 const Timetable = require('../models/Timetable');
 const Class = require('../models/Class');
+const Device = require('../models/Device');
+const Department = require('../models/Department');
 const { requireAuth, requireRoles } = require('../middleware/auth');
 const { validateRequest } = require('../middleware/validate');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 
@@ -20,6 +23,14 @@ const generateToken = (userId) => {
     JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRES_IN || '30d' }
   );
+};
+
+// Encrypt device ID (admin-side assignment)
+const encryptDeviceId = (deviceId, secretKey = process.env.DEVICE_ENCRYPTION_KEY || 'default-secret-key-change-in-production') => {
+  const cipher = crypto.createCipheriv('aes-128-cbc', Buffer.from(secretKey.slice(0, 16)), Buffer.alloc(16, 0));
+  let encrypted = cipher.update(deviceId, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  return encrypted;
 };
 
 // ==================== STAFF MANAGEMENT ====================
@@ -958,6 +969,243 @@ router.delete('/users/:id', requireAuth, requireRoles('super_admin'), async (req
   }
 });
 
+// ==================== DEPARTMENT MANAGEMENT ====================
+
+/**
+ * @route   GET /api/admin/departments
+ * @desc    List departments
+ * @access  Admin only
+ */
+router.get('/departments', requireAuth, requireRoles('super_admin', 'admin'), async (_req, res) => {
+  try {
+    const departments = await Department.find({}).sort({ name: 1 });
+    res.json({ success: true, count: departments.length, data: departments });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * @route   POST /api/admin/departments
+ * @desc    Create department
+ * @access  Admin only
+ */
+router.post('/departments',
+  requireAuth,
+  requireRoles('super_admin', 'admin'),
+  [
+    body('name').notEmpty().withMessage('Name is required'),
+    body('code').notEmpty().withMessage('Code is required')
+  ],
+  validateRequest,
+  async (req, res) => {
+    try {
+      const { name, code, headOfDepartment, contactEmail, contactPhone, description } = req.body;
+
+      const existing = await Department.findOne({ $or: [{ name }, { code: code.toUpperCase() }] });
+      if (existing) {
+        return res.status(400).json({ success: false, message: 'Department name or code already exists' });
+      }
+
+      const department = await Department.create({
+        name,
+        code: code.toUpperCase(),
+        headOfDepartment,
+        contactEmail,
+        contactPhone,
+        description,
+      });
+
+      res.status(201).json({ success: true, message: 'Department created', data: department });
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+);
+
+/**
+ * @route   PUT /api/admin/departments/:id
+ * @desc    Update department
+ * @access  Admin only
+ */
+router.put('/departments/:id', requireAuth, requireRoles('super_admin', 'admin'), async (req, res) => {
+  try {
+    const dept = await Department.findById(req.params.id);
+    if (!dept) return res.status(404).json({ success: false, message: 'Department not found' });
+
+    const { name, code, headOfDepartment, contactEmail, contactPhone, description, isActive } = req.body;
+
+    if (name) dept.name = name;
+    if (code) dept.code = code.toUpperCase();
+    if (headOfDepartment !== undefined) dept.headOfDepartment = headOfDepartment;
+    if (contactEmail !== undefined) dept.contactEmail = contactEmail;
+    if (contactPhone !== undefined) dept.contactPhone = contactPhone;
+    if (description !== undefined) dept.description = description;
+    if (isActive !== undefined) dept.isActive = isActive;
+
+    await dept.save();
+    res.json({ success: true, message: 'Department updated', data: dept });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * @route   DELETE /api/admin/departments/:id
+ * @desc    Delete department
+ * @access  Admin only
+ */
+router.delete('/departments/:id', requireAuth, requireRoles('super_admin', 'admin'), async (req, res) => {
+  try {
+    const dept = await Department.findById(req.params.id);
+    if (!dept) return res.status(404).json({ success: false, message: 'Department not found' });
+
+    await dept.deleteOne();
+    res.json({ success: true, message: 'Department deleted' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ==================== CLASS MANAGEMENT ====================
+
+/**
+ * @route   POST /api/admin/classes
+ * @desc    Create class
+ * @access  Admin only
+ */
+router.post('/classes',
+  requireAuth,
+  requireRoles('super_admin', 'admin'),
+  [
+    body('name').notEmpty().withMessage('Name is required'),
+    body('code').notEmpty().withMessage('Code is required'),
+    body('department').notEmpty().withMessage('Department is required'),
+    body('semester').isInt({ min: 1 }).withMessage('Semester must be a positive integer'),
+    body('academicYear').notEmpty().withMessage('Academic year is required'),
+  ],
+  validateRequest,
+  async (req, res) => {
+    try {
+      const existing = await Class.findOne({ $or: [{ name: req.body.name }, { code: req.body.code.toUpperCase() }] });
+      if (existing) {
+        return res.status(400).json({ success: false, message: 'Class name or code already exists' });
+      }
+
+      const klass = await Class.create({
+        ...req.body,
+        code: req.body.code.toUpperCase(),
+      });
+
+      res.status(201).json({ success: true, message: 'Class created', data: klass });
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+);
+
+/**
+ * @route   PUT /api/admin/classes/:id
+ * @desc    Update class
+ * @access  Admin only
+ */
+router.put('/classes/:id', requireAuth, requireRoles('super_admin', 'admin'), async (req, res) => {
+  try {
+    const klass = await Class.findById(req.params.id);
+    if (!klass) return res.status(404).json({ success: false, message: 'Class not found' });
+
+    const fields = ['name', 'code', 'department', 'semester', 'academicYear', 'section', 'coordinator', 'beaconId', 'classroom', 'location', 'attendanceSettings'];
+    fields.forEach((field) => {
+      if (req.body[field] !== undefined) {
+        if (field === 'code') {
+          klass.code = req.body.code.toUpperCase();
+        } else {
+          klass[field] = req.body[field];
+        }
+      }
+    });
+
+    await klass.save();
+    res.json({ success: true, message: 'Class updated', data: klass });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * @route   DELETE /api/admin/classes/:id
+ * @desc    Delete class
+ * @access  Admin only
+ */
+router.delete('/classes/:id', requireAuth, requireRoles('super_admin', 'admin'), async (req, res) => {
+  try {
+    const klass = await Class.findById(req.params.id);
+    if (!klass) return res.status(404).json({ success: false, message: 'Class not found' });
+
+    await klass.deleteOne();
+    res.json({ success: true, message: 'Class deleted' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * @route   PUT /api/admin/classes/:id/attendance-settings
+ * @desc    Update attendance rules for a class
+ * @access  Admin only
+ */
+router.put('/classes/:id/attendance-settings',
+  requireAuth,
+  requireRoles('super_admin', 'admin'),
+  [
+    body('minimumRequiredPercentage').optional().isFloat({ min: 0, max: 100 }),
+    body('autoMarkingEnabled').optional().isBoolean(),
+    body('scanInterval').optional().isInt({ min: 1, max: 30 }),
+    body('lateThresholdMinutes').optional().isInt({ min: 0, max: 180 }),
+    body('rssiThreshold').optional().isInt({ min: -120, max: 0 }),
+    body('maxDistance').optional().isInt({ min: 1, max: 100 }),
+    body('motionVerificationRequired').optional().isBoolean(),
+    body('motionConfidenceThreshold').optional().isFloat({ min: 0, max: 1 }),
+    body('allowManualOverride').optional().isBoolean(),
+    body('requireApprovalForManualChanges').optional().isBoolean(),
+    body('manualOverrideRoles').optional().isArray(),
+    body('manualOverrideApprovalRoles').optional().isArray(),
+  ],
+  validateRequest,
+  async (req, res) => {
+    try {
+      const klass = await Class.findById(req.params.id);
+      if (!klass) return res.status(404).json({ success: false, message: 'Class not found' });
+
+      const settings = [
+        'minimumRequiredPercentage',
+        'autoMarkingEnabled',
+        'scanInterval',
+        'lateThresholdMinutes',
+        'rssiThreshold',
+        'maxDistance',
+        'motionVerificationRequired',
+        'motionConfidenceThreshold',
+        'allowManualOverride',
+        'requireApprovalForManualChanges',
+        'manualOverrideRoles',
+        'manualOverrideApprovalRoles',
+      ];
+
+      settings.forEach((key) => {
+        if (req.body[key] !== undefined) {
+          klass.attendanceSettings[key] = req.body[key];
+        }
+      });
+
+      await klass.save();
+      res.json({ success: true, message: 'Attendance settings updated', data: klass.attendanceSettings });
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+);
+
 // ==================== TIMETABLE & SHIFT MANAGEMENT ====================
 
 /**
@@ -1129,10 +1377,203 @@ router.delete('/timetables/:id', requireAuth, requireRoles('super_admin', 'admin
  */
 router.get('/classes', requireAuth, requireRoles('super_admin', 'admin', 'teacher'), async (req, res) => {
   try {
-    const classes = await Class.find().sort({ name: 1 });
+    const filter = {};
+    if (req.query.department) filter.department = req.query.department;
+    if (req.query.semester) filter.semester = Number(req.query.semester);
+
+    const classes = await Class.find(filter).sort({ name: 1 });
     res.json({ success: true, count: classes.length, data: classes });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ==================== DEVICE ASSIGNMENT (ADMIN) ====================
+
+/**
+ * @route   GET /api/admin/devices
+ * @desc    List devices with user mapping
+ * @access  Admin only
+ */
+router.get('/devices', requireAuth, requireRoles('super_admin', 'admin'), async (req, res) => {
+  try {
+    const devices = await Device.find()
+      .populate('userId', 'name email role')
+      .populate('pairedBy', 'name email');
+    res.json({ success: true, count: devices.length, data: devices });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * @route   POST /api/admin/devices/assign
+ * @desc    Assign/map a device to a user (hardware ID)
+ * @access  Admin only
+ */
+router.post('/devices/assign', requireAuth, requireRoles('super_admin', 'admin'), async (req, res) => {
+  try {
+    const { userId, deviceId, hardwareModel = 'nRF52840', imuModel = 'LSM6DSO', firmwareVersion = '1.0.0', txPower = -59 } = req.body;
+
+    if (!userId || !deviceId) {
+      return res.status(400).json({ success: false, message: 'userId and deviceId are required' });
+    }
+
+    const normalizedDeviceId = deviceId.toUpperCase().replace(/[:-]/g, '');
+
+    // Ensure device not mapped to another user
+    const existingDevice = await Device.findOne({ deviceId: normalizedDeviceId, isActive: true });
+    if (existingDevice && existingDevice.userId.toString() !== userId) {
+      return res.status(409).json({ success: false, message: 'Device already assigned to another user' });
+    }
+
+    // Ensure user not holding another active device
+    const existingUserDevice = await Device.findOne({ userId, isActive: true });
+    if (existingUserDevice && existingUserDevice.deviceId !== normalizedDeviceId) {
+      return res.status(409).json({ success: false, message: 'User already has an active device. Unassign first.' });
+    }
+
+    const encryptionKey = crypto.randomBytes(16).toString('hex');
+    const encryptedId = encryptDeviceId(normalizedDeviceId, encryptionKey);
+
+    const device = await Device.findOneAndUpdate(
+      { deviceId: normalizedDeviceId },
+      {
+        deviceId: normalizedDeviceId,
+        encryptedId,
+        encryptionKey,
+        userId,
+        hardwareModel,
+        imuModel,
+        firmwareVersion,
+        txPower,
+        isActive: true,
+        isSuspended: false,
+        isOnline: false,
+        registeredAt: new Date(),
+        lastSeen: new Date(),
+        pairedBy: req.userId,
+      },
+      { upsert: true, new: true, runValidators: true }
+    );
+
+    res.status(201).json({ success: true, message: 'Device assigned successfully', data: device });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * @route   PUT /api/admin/devices/:id/unassign
+ * @desc    Unassign/deactivate device
+ * @access  Admin only
+ */
+router.put('/devices/:id/unassign', requireAuth, requireRoles('super_admin', 'admin'), async (req, res) => {
+  try {
+    const device = await Device.findById(req.params.id);
+    if (!device) return res.status(404).json({ success: false, message: 'Device not found' });
+
+    device.isActive = false;
+    device.isOnline = false;
+    await device.save();
+
+    res.json({ success: true, message: 'Device unassigned', data: device });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ==================== MANUAL ATTENDANCE APPROVAL WORKFLOW ====================
+
+/**
+ * @route   GET /api/admin/attendance/pending
+ * @desc    List attendance records requiring approval
+ * @access  Admin/Approvers
+ */
+router.get('/attendance/pending', requireAuth, requireRoles('super_admin', 'admin', 'teacher'), async (req, res) => {
+  try {
+    const filter = { approvalStatus: 'pending', requiresApproval: true };
+    if (req.query.classId) filter.classId = req.query.classId;
+    if (req.query.studentId) filter.studentId = req.query.studentId;
+
+    const records = await Attendance.find(filter)
+      .populate('studentId', 'name email')
+      .populate('classId', 'name code department attendanceSettings')
+      .populate('markedBy', 'name email role');
+
+    res.json({ success: true, count: records.length, data: records });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * @route   PUT /api/admin/attendance/:id/approve
+ * @desc    Approve a manual attendance change
+ * @access  Admin/Approvers based on class settings
+ */
+router.put('/attendance/:id/approve', requireAuth, requireRoles('super_admin', 'admin', 'teacher'), async (req, res) => {
+  try {
+    const record = await Attendance.findById(req.params.id).populate('classId');
+    if (!record) return res.status(404).json({ success: false, message: 'Attendance record not found' });
+
+    const klass = record.classId;
+    const approvalRoles = (klass?.attendanceSettings?.manualOverrideApprovalRoles) || ['super_admin', 'admin'];
+    if (!approvalRoles.includes(req.user.role)) {
+      return res.status(403).json({ success: false, message: 'Not authorized to approve this attendance change' });
+    }
+
+    record.approvalStatus = 'approved';
+    record.requiresApproval = false;
+    record.approvedBy = req.user._id;
+    record.approvedAt = new Date();
+    record.rejectionReason = undefined;
+    record.modificationHistory.push({
+      modifiedBy: req.user._id,
+      previousStatus: 'pending',
+      newStatus: 'approved',
+      reason: req.body.reason || 'Approved manual override'
+    });
+
+    await record.save();
+    res.json({ success: true, message: 'Attendance approved', data: record });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * @route   PUT /api/admin/attendance/:id/reject
+ * @desc    Reject a manual attendance change
+ * @access  Admin/Approvers based on class settings
+ */
+router.put('/attendance/:id/reject', requireAuth, requireRoles('super_admin', 'admin', 'teacher'), async (req, res) => {
+  try {
+    const record = await Attendance.findById(req.params.id).populate('classId');
+    if (!record) return res.status(404).json({ success: false, message: 'Attendance record not found' });
+
+    const klass = record.classId;
+    const approvalRoles = (klass?.attendanceSettings?.manualOverrideApprovalRoles) || ['super_admin', 'admin'];
+    if (!approvalRoles.includes(req.user.role)) {
+      return res.status(403).json({ success: false, message: 'Not authorized to reject this attendance change' });
+    }
+
+    record.approvalStatus = 'rejected';
+    record.requiresApproval = false;
+    record.approvedBy = req.user._id;
+    record.approvedAt = new Date();
+    record.rejectionReason = req.body.reason || 'Rejected manual override';
+    record.modificationHistory.push({
+      modifiedBy: req.user._id,
+      previousStatus: 'pending',
+      newStatus: 'rejected',
+      reason: record.rejectionReason
+    });
+
+    await record.save();
+    res.json({ success: true, message: 'Attendance rejected', data: record });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
   }
 });
 

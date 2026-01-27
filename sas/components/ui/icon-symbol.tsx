@@ -30,10 +30,13 @@ const MAPPING = {
   'trash': 'delete',
   'pencil': 'edit',
   'checkmark': 'check',
+  'checkmark.circle.fill': 'check-circle',
+  'arrow.down.doc.fill': 'save-alt',
   
   // People & Students
   'person.3.fill': 'groups',
   'person.2.fill': 'people',
+  'person.2.circle.fill': 'manage-accounts',
   'person.fill': 'person',
   'person': 'person-outline',
   'person.circle.fill': 'account-circle',
@@ -48,11 +51,17 @@ const MAPPING = {
   'graduationcap.fill': 'school',
   'rectangle.3.group': 'dashboard',
   
+  // Analytics & Charts
+  'chart.pie.fill': 'pie-chart',
+  'chart.bar.fill': 'bar-chart',
+  
   // Numbers & Text
   'number': 'tag',
   
   // Time & Calendar
   'calendar': 'calendar-today',
+  'calendar.fill': 'calendar-month',
+  'calendar.badge.clock': 'schedule',
   'calendar.badge.exclamationmark': 'event-busy',
   'clock.fill': 'access-time',
   'clock': 'schedule',

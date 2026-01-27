@@ -39,15 +39,24 @@ function RootLayoutNav() {
     if (loading) return;
 
     const inTabsGroup = segments[0] === '(tabs)';
+    const inAdminGroup = segments[0] === 'admin';
+    const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
 
     if (!isAuthenticated && segments[0] !== 'login' && segments[0] !== 'register') {
       // Redirect to login if not authenticated
       router.replace('/login');
     } else if (isAuthenticated && (segments[0] === 'login' || segments[0] === 'register')) {
       // Redirect to appropriate dashboard based on role
-      router.replace('/(tabs)');
+      if (isAdmin) {
+        router.replace('/admin');
+      } else {
+        router.replace('/(tabs)');
+      }
+    } else if (isAuthenticated && isAdmin && inTabsGroup) {
+      // Redirect admin users away from tabs to admin panel
+      router.replace('/admin');
     }
-  }, [isAuthenticated, segments, loading]);
+  }, [isAuthenticated, user?.role, segments, loading]);
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
@@ -55,6 +64,7 @@ function RootLayoutNav() {
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="register" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="admin" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>
       <StatusBar style="auto" />

@@ -11,9 +11,11 @@ import {
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/context/AuthContext';
+import AdminHeader from './AdminHeader';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -37,6 +39,7 @@ const ROLES = ['super_admin', 'admin', 'faculty', 'teacher', 'student', 'parent'
 
 export default function UserManagementScreen() {
   const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme ?? 'light'];
   const { token, user } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -142,7 +145,7 @@ export default function UserManagementScreen() {
     return (
       <ThemedView style={styles.container}>
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={Colors[colorScheme ?? 'light'].tint} />
+          <ActivityIndicator size="large" color={colors.tint} />
         </View>
       </ThemedView>
     );
@@ -150,84 +153,90 @@ export default function UserManagementScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      <AdminHeader title="User & Role Management" />
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
-          <ThemedText type="title">User & Role Management</ThemedText>
           <ThemedText style={styles.subtitle}>Total: {users.length} users</ThemedText>
         </View>
 
         {/* Search Bar */}
-        <View style={[styles.searchContainer, styles.cardShadow]}>
+        <View style={[styles.searchContainer, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
           <TextInput
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: colors.text }]}
             placeholder="Search by name, email, or phone..."
-            placeholderTextColor="#999"
+            placeholderTextColor={colors.textSecondary}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
         </View>
 
         {/* Filters */}
-        <View style={[styles.filterContainer, styles.cardShadow]}>
+        <View style={[styles.filterContainer, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
           <ThemedText type="defaultSemiBold" style={styles.filterTitle}>
             Filters
           </ThemedText>
 
-          <ThemedText style={styles.filterLabel}>Role</ThemedText>
-          <ScrollView horizontal style={styles.filterScroll}>
+          <ThemedText lightColor={colors.textSecondary} darkColor={colors.textSecondary} style={styles.filterLabel}>Role</ThemedText>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
             <TouchableOpacity
-              style={[styles.filterButton, !filterRole && styles.filterButtonActive]}
+              style={[
+                styles.filterButton,
+                { borderColor: colors.border },
+                !filterRole && { backgroundColor: colors.tint, borderColor: colors.tint },
+              ]}
               onPress={() => setFilterRole('')}>
-              <ThemedText
-                style={[styles.filterButtonText, !filterRole && styles.filterButtonTextActive]}>
+              <ThemedText style={[styles.filterButtonText, !filterRole && { color: '#FFFFFF' }]}>
                 All
               </ThemedText>
             </TouchableOpacity>
             {ROLES.map((role) => (
               <TouchableOpacity
                 key={role}
-                style={[styles.filterButton, filterRole === role && styles.filterButtonActive]}
+                style={[
+                  styles.filterButton,
+                  { borderColor: colors.border },
+                  filterRole === role && { backgroundColor: colors.tint, borderColor: colors.tint },
+                ]}
                 onPress={() => setFilterRole(role)}>
-                <ThemedText
-                  style={[
-                    styles.filterButtonText,
-                    filterRole === role && styles.filterButtonTextActive,
-                  ]}>
+                <ThemedText style={[styles.filterButtonText, filterRole === role && { color: '#FFFFFF' }]}>
                   {role}
                 </ThemedText>
               </TouchableOpacity>
             ))}
           </ScrollView>
 
-          <ThemedText style={styles.filterLabel}>Status</ThemedText>
+          <ThemedText lightColor={colors.textSecondary} darkColor={colors.textSecondary} style={styles.filterLabel}>Status</ThemedText>
           <View style={styles.statusFilterRow}>
             <TouchableOpacity
-              style={[styles.filterButton, !filterStatus && styles.filterButtonActive]}
+              style={[
+                styles.filterButton,
+                { borderColor: colors.border },
+                !filterStatus && { backgroundColor: colors.tint, borderColor: colors.tint },
+              ]}
               onPress={() => setFilterStatus('')}>
-              <ThemedText
-                style={[styles.filterButtonText, !filterStatus && styles.filterButtonTextActive]}>
+              <ThemedText style={[styles.filterButtonText, !filterStatus && { color: '#FFFFFF' }]}>
                 All
               </ThemedText>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.filterButton, filterStatus === 'true' && styles.filterButtonActive]}
+              style={[
+                styles.filterButton,
+                { borderColor: colors.border },
+                filterStatus === 'true' && { backgroundColor: colors.tint, borderColor: colors.tint },
+              ]}
               onPress={() => setFilterStatus('true')}>
-              <ThemedText
-                style={[
-                  styles.filterButtonText,
-                  filterStatus === 'true' && styles.filterButtonTextActive,
-                ]}>
+              <ThemedText style={[styles.filterButtonText, filterStatus === 'true' && { color: '#FFFFFF' }]}>
                 Active
               </ThemedText>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.filterButton, filterStatus === 'false' && styles.filterButtonActive]}
+              style={[
+                styles.filterButton,
+                { borderColor: colors.border },
+                filterStatus === 'false' && { backgroundColor: colors.tint, borderColor: colors.tint },
+              ]}
               onPress={() => setFilterStatus('false')}>
-              <ThemedText
-                style={[
-                  styles.filterButtonText,
-                  filterStatus === 'false' && styles.filterButtonTextActive,
-                ]}>
+              <ThemedText style={[styles.filterButtonText, filterStatus === 'false' && { color: '#FFFFFF' }]}>
                 Inactive
               </ThemedText>
             </TouchableOpacity>
@@ -240,31 +249,35 @@ export default function UserManagementScreen() {
           data={users}
           keyExtractor={(item) => item._id}
           renderItem={({ item }) => (
-            <View style={[styles.userCard, styles.cardShadow]}>
+            <View style={[styles.userCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
               <View style={styles.userHeader}>
                 <View style={styles.userInfo}>
                   <ThemedText type="defaultSemiBold" style={styles.userName}>
                     {item.name}
                   </ThemedText>
-                  <ThemedText style={styles.userDetail}>{item.email}</ThemedText>
-                  {item.phone && <ThemedText style={styles.userDetail}>📱 {item.phone}</ThemedText>}
+                  <ThemedText lightColor={colors.textSecondary} darkColor={colors.textSecondary} style={styles.userDetail}>
+                    {item.email}
+                  </ThemedText>
+                  {item.phone && (
+                    <View style={styles.userDetailRow}>
+                      <IconSymbol size={16} name="phone.fill" color={colors.tint} />
+                      <ThemedText lightColor={colors.textSecondary} darkColor={colors.textSecondary} style={styles.userDetail}>
+                        {item.phone}
+                      </ThemedText>
+                    </View>
+                  )}
                   {item.studentId && (
-                    <ThemedText style={styles.userDetail}>
-                      Roll: {item.studentId.rollNumber} | {item.studentId.class}-
-                      {item.studentId.section}
+                    <ThemedText lightColor={colors.textSecondary} darkColor={colors.textSecondary} style={styles.userDetail}>
+                      Roll: {item.studentId.rollNumber} | {item.studentId.class}-{item.studentId.section}
                     </ThemedText>
                   )}
                   {item.lastLogin && (
-                    <ThemedText style={styles.userDetail}>
+                    <ThemedText lightColor={colors.textSecondary} darkColor={colors.textSecondary} style={styles.userDetail}>
                       Last login: {new Date(item.lastLogin).toLocaleDateString()}
                     </ThemedText>
                   )}
                 </View>
-                <View
-                  style={[
-                    styles.statusBadge,
-                    { backgroundColor: item.isActive ? '#4caf50' : '#f44336' },
-                  ]}>
+                <View style={[styles.statusBadge, { backgroundColor: item.isActive ? colors.success : colors.error }]}>
                   <ThemedText style={styles.statusBadgeText}>
                     {item.isActive ? 'Active' : 'Inactive'}
                   </ThemedText>
@@ -278,9 +291,8 @@ export default function UserManagementScreen() {
 
                 {user.role === 'super_admin' && (
                   <TouchableOpacity
-                    style={styles.actionButton}
+                    style={[styles.actionButton, { backgroundColor: colors.border }]}
                     onPress={() => {
-                      // Show role picker
                       const buttons = ROLES.map((role) => ({
                         text: role,
                         onPress: () => handleChangeRole(item._id, role),
@@ -293,12 +305,9 @@ export default function UserManagementScreen() {
                 )}
 
                 <TouchableOpacity
-                  style={[
-                    styles.actionButton,
-                    { backgroundColor: item.isActive ? '#f44336' : '#4caf50' },
-                  ]}
+                  style={[styles.actionButton, { backgroundColor: item.isActive ? colors.error : colors.success }]}
                   onPress={() => handleToggleStatus(item._id, item.isActive)}>
-                  <ThemedText style={[styles.actionButtonText, { color: '#fff' }]}>
+                  <ThemedText style={[styles.actionButtonText, { color: '#FFFFFF' }]}>
                     {item.isActive ? 'Deactivate' : 'Activate'}
                   </ThemedText>
                 </TouchableOpacity>
@@ -328,14 +337,12 @@ function getRoleColor(role: string) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f7f8fa',
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 20,
+    padding: 20,
   },
   center: {
     flex: 1,
@@ -343,132 +350,121 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   header: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   subtitle: {
-    fontSize: 14,
-    opacity: 0.6,
-    marginTop: 4,
+    fontSize: 15,
+    marginTop: 6,
   },
   searchContainer: {
-    backgroundColor: '#ffffff',
-    padding: 12,
-    borderRadius: 14,
+    padding: 14,
+    borderRadius: 12,
     marginBottom: 16,
+    borderWidth: 1,
   },
   searchInput: {
-    fontSize: 14,
-    padding: 8,
+    fontSize: 15,
+    padding: 4,
   },
   filterContainer: {
-    backgroundColor: '#ffffff',
     padding: 16,
-    borderRadius: 14,
-    marginBottom: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderWidth: 1,
   },
   filterTitle: {
-    fontSize: 16,
-    marginBottom: 12,
+    fontSize: 17,
+    marginBottom: 16,
   },
   filterLabel: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
-    marginTop: 8,
-    marginBottom: 8,
-    opacity: 0.7,
+    marginTop: 12,
+    marginBottom: 10,
   },
   filterScroll: {
-    marginBottom: 12,
-    marginHorizontal: -16,
-    paddingHorizontal: 16,
+    marginBottom: 8,
   },
   statusFilterRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
+    flexWrap: 'wrap',
   },
   filterButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#ddd',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1.5,
     marginRight: 8,
-  },
-  filterButtonActive: {
-    backgroundColor: '#2196f3',
-    borderColor: '#2196f3',
+    marginBottom: 8,
   },
   filterButtonText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '600',
   },
-  filterButtonTextActive: {
-    color: '#fff',
-  },
   userCard: {
-    backgroundColor: '#ffffff',
-    padding: 16,
-    borderRadius: 14,
-    marginBottom: 12,
+    padding: 18,
+    borderRadius: 12,
+    marginBottom: 14,
+    borderWidth: 1,
   },
   userHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   userInfo: {
     flex: 1,
+    marginRight: 12,
   },
   userName: {
-    fontSize: 16,
-    marginBottom: 4,
+    fontSize: 17,
+    marginBottom: 6,
+  },
+  userDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
   },
   userDetail: {
-    fontSize: 13,
-    opacity: 0.7,
-    marginTop: 2,
+    fontSize: 14,
+    marginTop: 4,
   },
   statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  userActions: {
-    flexDirection: 'row',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  roleBadge: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
   },
-  roleBadgeText: {
+  statusBadgeText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#fff',
+    color: '#FFFFFF',
+  },
+  userActions: {
+    flexDirection: 'row',
+    gap: 10,
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  roleBadge: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 18,
+  },
+  roleBadgeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   actionButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: '#e5e7eb',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 18,
   },
   actionButtonText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
-  },
-  cardShadow: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
   },
 });

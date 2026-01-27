@@ -10,9 +10,11 @@ import {
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/context/AuthContext';
+import AdminHeader from '../AdminHeader';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -80,9 +82,9 @@ export default function AnalyticsScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      <AdminHeader title="Analytics & Reports" />
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
-          <ThemedText type="title">Analytics</ThemedText>
           <ThemedText style={styles.subtitle}>Detailed Reports & Analytics</ThemedText>
         </View>
 

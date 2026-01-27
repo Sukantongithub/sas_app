@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/context/AuthContext';
@@ -294,41 +295,53 @@ export default function AdminDashboardScreen() {
               <TouchableOpacity
                 style={styles.actionButton}
                 onPress={handleManageStudents}>
-                <ThemedText style={styles.actionButtonText}>
-                  📚 Manage Students
-                </ThemedText>
-                <ThemedText style={styles.actionButtonSubtext}>
-                  Create, Edit, Delete, View Analytics
-                </ThemedText>
+                <IconSymbol size={24} name="graduationcap.fill" color={Colors[colorScheme ?? 'light'].tint} />
+                <View style={styles.actionButtonContent}>
+                  <ThemedText style={styles.actionButtonText}>
+                    Manage Students
+                  </ThemedText>
+                  <ThemedText style={styles.actionButtonSubtext}>
+                    Create, Edit, Delete, View Analytics
+                  </ThemedText>
+                </View>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={styles.actionButton}
                 onPress={handleManageStaff}>
-                <ThemedText style={styles.actionButtonText}>
-                  👥 Manage Staff
-                </ThemedText>
-                <ThemedText style={styles.actionButtonSubtext}>
-                  Create, Edit, Delete, Performance Tracking
-                </ThemedText>
+                <IconSymbol size={24} name="person.3.fill" color={Colors[colorScheme ?? 'light'].tint} />
+                <View style={styles.actionButtonContent}>
+                  <ThemedText style={styles.actionButtonText}>
+                    Manage Staff
+                  </ThemedText>
+                  <ThemedText style={styles.actionButtonSubtext}>
+                    Create, Edit, Delete, Performance Tracking
+                  </ThemedText>
+                </View>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.actionButton}>
-                <ThemedText style={styles.actionButtonText}>
-                  📊 View Reports
-                </ThemedText>
-                <ThemedText style={styles.actionButtonSubtext}>
-                  Attendance, Leave, Performance Reports
-                </ThemedText>
+                <IconSymbol size={24} name="chart.bar.fill" color={Colors[colorScheme ?? 'light'].tint} />
+                <View style={styles.actionButtonContent}>
+                  <ThemedText style={styles.actionButtonText}>
+                    View Reports
+                  </ThemedText>
+                  <ThemedText style={styles.actionButtonSubtext}>
+                    Attendance, Leave, Performance Reports
+                  </ThemedText>
+                </View>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.actionButton}>
-                <ThemedText style={styles.actionButtonText}>
-                  📥 Export Data
-                </ThemedText>
-                <ThemedText style={styles.actionButtonSubtext}>
-                  Export analytics to JSON/CSV
-                </ThemedText>
+                <IconSymbol size={24} name="arrow.down.doc.fill" color={Colors[colorScheme ?? 'light'].tint} />
+                <View style={styles.actionButtonContent}>
+                  <ThemedText style={styles.actionButtonText}>
+                    Export Data
+                  </ThemedText>
+                  <ThemedText style={styles.actionButtonSubtext}>
+                    Export analytics to JSON/CSV
+                  </ThemedText>
+                </View>
               </TouchableOpacity>
             </View>
           </View>
@@ -336,7 +349,8 @@ export default function AdminDashboardScreen() {
 
         {/* Refresh Button */}
         <TouchableOpacity style={styles.refreshButton} onPress={fetchDashboard}>
-          <ThemedText style={styles.refreshButtonText}>🔄 Refresh</ThemedText>
+          <IconSymbol size={20} name="arrow.clockwise" color="#fff" />
+          <ThemedText style={styles.refreshButtonText}>Refresh</ThemedText>
         </TouchableOpacity>
       </ScrollView>
     </ThemedView>
@@ -461,6 +475,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderLeftWidth: 4,
     borderLeftColor: '#007AFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  actionButtonContent: {
+    flex: 1,
   },
   actionButtonText: {
     fontSize: 16,
@@ -478,6 +498,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     marginBottom: 20,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
   },
   refreshButtonText: {
     color: '#fff',

@@ -15,6 +15,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
+import AdminHeader from './AdminHeader';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -168,9 +169,9 @@ export default function StaffManagementScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      <AdminHeader title="Manage Staff" />
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
-          <ThemedText type="title">Manage Staff</ThemedText>
           <ThemedText style={styles.subtitle}>Total: {staff.length}</ThemedText>
         </View>
 
@@ -308,7 +309,6 @@ export default function StaffManagementScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f7f8fa',
   },
   scrollView: {
     flex: 1,
@@ -331,7 +331,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   formContainer: {
-    backgroundColor: '#ffffff',
+    backgroundColor: Colors.dark.cardBackground,
     padding: 16,
     borderRadius: 14,
     marginBottom: 16,
@@ -341,21 +341,23 @@ const styles = StyleSheet.create({
   formTitle: {
     fontSize: 16,
     marginBottom: 12,
+    fontWeight: '600',
   },
   input: {
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: Colors.dark.text + '30',
     borderRadius: 12,
     padding: 12,
     marginBottom: 12,
     fontSize: 14,
-    backgroundColor: '#f9fafb',
+    backgroundColor: Colors.dark.text + '10',
+    color: Colors.dark.text,
   },
   label: {
     fontSize: 12,
     fontWeight: '600',
     marginBottom: 8,
-    opacity: 0.7,
+    opacity: 0.8,
   },
   designationScroll: {
     marginBottom: 12,
@@ -367,7 +369,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: Colors.dark.text + '30',
     marginRight: 8,
   },
   designationButtonActive: {
@@ -413,12 +415,14 @@ const styles = StyleSheet.create({
   },
   staffCard: {
     flexDirection: 'row',
-    backgroundColor: '#ffffff',
+    backgroundColor: Colors.dark.cardBackground,
     padding: 14,
     borderRadius: 14,
     marginBottom: 12,
     alignItems: 'center',
     justifyContent: 'space-between',
+    borderLeftWidth: 4,
+    borderLeftColor: '#9c27b0',
   },
   staffInfo: {
     flex: 1,

@@ -15,6 +15,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
+import AdminHeader from './AdminHeader';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -35,6 +36,7 @@ interface Analytics {
 
 export default function AdminScreen() {
   const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme ?? 'light'];
   const router = useRouter();
   const { token, user } = useAuth();
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
@@ -70,7 +72,12 @@ export default function AdminScreen() {
   };
 
   const StatCard = ({ label, value }: { label: string; value: number }) => (
-    <View style={[styles.statCard, styles.cardShadow]}>
+    <View
+      style={[
+        styles.statCard,
+        styles.cardShadow,
+        { backgroundColor: colors.cardBackground, borderLeftColor: colors.tint },
+      ]}>
       <ThemedText type="defaultSemiBold" style={styles.statValue}>
         {value}
       </ThemedText>
@@ -89,7 +96,9 @@ export default function AdminScreen() {
     description: string;
     onPress: () => void;
   }) => (
-    <TouchableOpacity style={[styles.actionCard, styles.cardShadow]} onPress={onPress}>
+    <TouchableOpacity
+      style={[styles.actionCard, styles.cardShadow, { backgroundColor: colors.cardBackground, borderLeftColor: colors.tint }]}
+      onPress={onPress}>
       <View style={styles.actionIconContainer}>
         <IconSymbol size={28} name={icon as any} color={Colors[colorScheme ?? 'light'].tint} />
       </View>
@@ -125,18 +134,12 @@ export default function AdminScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      <AdminHeader title="Dashboard" />
+
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-        {/* Header */}
-        <View style={styles.header}>
-          <ThemedText type="title" style={styles.headerTitle}>
-            Admin Dashboard
-          </ThemedText>
-          <ThemedText style={styles.subtitle}>Welcome {user.name}</ThemedText>
-        </View>
-
         {/* Key Stats */}
         {analytics && (
           <>
@@ -152,15 +155,15 @@ export default function AdminScreen() {
 
             {/* Quick Stats */}
             <View style={styles.quickStatsContainer}>
-              <View style={[styles.miniStat, styles.cardShadow, { backgroundColor: '#ffffff' }]}>
+              <View style={[styles.miniStat, styles.cardShadow, { backgroundColor: colors.cardBackground }]}>
                 <ThemedText style={styles.miniStatValue}>{analytics.attendance.present}</ThemedText>
                 <ThemedText style={styles.miniStatLabel}>Present</ThemedText>
               </View>
-              <View style={[styles.miniStat, styles.cardShadow, { backgroundColor: '#ffffff' }]}>
+              <View style={[styles.miniStat, styles.cardShadow, { backgroundColor: colors.cardBackground }]}>
                 <ThemedText style={styles.miniStatValue}>{analytics.attendance.absent}</ThemedText>
                 <ThemedText style={styles.miniStatLabel}>Absent</ThemedText>
               </View>
-              <View style={[styles.miniStat, styles.cardShadow, { backgroundColor: '#ffffff' }]}>
+              <View style={[styles.miniStat, styles.cardShadow, { backgroundColor: colors.cardBackground }]}>
                 <ThemedText style={styles.miniStatValue}>{analytics.attendance.late}</ThemedText>
                 <ThemedText style={styles.miniStatLabel}>Late</ThemedText>
               </View>
@@ -224,15 +227,15 @@ export default function AdminScreen() {
               Leave Requests
             </ThemedText>
             <View style={styles.leaveStatsRow}>
-              <View style={[styles.leaveStat, styles.cardShadow]}>
+              <View style={[styles.leaveStat, styles.cardShadow, { backgroundColor: colors.cardBackground }]}>
                 <ThemedText style={styles.leaveStatValue}>{analytics.leaves.approved}</ThemedText>
                 <ThemedText style={styles.leaveStatLabel}>Approved</ThemedText>
               </View>
-              <View style={[styles.leaveStat, styles.cardShadow]}>
+                <View style={[styles.leaveStat, styles.cardShadow, { backgroundColor: colors.cardBackground }]}>
                 <ThemedText style={styles.leaveStatValue}>{analytics.leaves.pending}</ThemedText>
                 <ThemedText style={styles.leaveStatLabel}>Pending</ThemedText>
               </View>
-              <View style={[styles.leaveStat, styles.cardShadow]}>
+                <View style={[styles.leaveStat, styles.cardShadow, { backgroundColor: colors.cardBackground }]}>
                 <ThemedText style={styles.leaveStatValue}>{analytics.leaves.rejected}</ThemedText>
                 <ThemedText style={styles.leaveStatLabel}>Rejected</ThemedText>
               </View>
@@ -247,7 +250,6 @@ export default function AdminScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f7f8fa',
   },
   scrollView: {
     flex: 1,
@@ -262,17 +264,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
   },
-  header: {
-    marginBottom: 20,
-  },
-  headerTitle: {
-    fontSize: 28,
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 14,
-    opacity: 0.6,
-  },
   statsContainer: {
     flexDirection: 'row',
     gap: 12,
@@ -280,12 +271,10 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: '#ffffff',
     padding: 16,
     borderRadius: 14,
     alignItems: 'center',
     borderLeftWidth: 4,
-    borderLeftColor: '#007AFF',
   },
   statValue: {
     fontSize: 24,
@@ -305,7 +294,6 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 12,
     alignItems: 'center',
-    backgroundColor: '#ffffff',
   },
   miniStatValue: {
     fontSize: 18,
@@ -326,12 +314,10 @@ const styles = StyleSheet.create({
   actionCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
     padding: 16,
     borderRadius: 14,
     marginBottom: 12,
     borderLeftWidth: 4,
-    borderLeftColor: '#007AFF',
   },
   actionIconContainer: {
     marginRight: 12,
@@ -358,7 +344,6 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 12,
     alignItems: 'center',
-    backgroundColor: '#ffffff',
   },
   leaveStatValue: {
     fontSize: 18,

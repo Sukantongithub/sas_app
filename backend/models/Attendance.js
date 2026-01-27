@@ -162,6 +162,19 @@ const attendanceSchema = new mongoose.Schema({
   approvedAt: {
     type: Date
   },
+
+  approvalStatus: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected'],
+    default: 'pending',
+    index: true
+  },
+
+  rejectionReason: {
+    type: String,
+    trim: true,
+    maxlength: 500
+  },
   
   // Audit trail
   modificationHistory: [{

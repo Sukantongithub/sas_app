@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { View } from 'react-native';
+import { useRouter } from 'expo-router';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -11,12 +12,19 @@ import { useAuth } from '@/context/AuthContext';
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const { user } = useAuth();
+  const router = useRouter();
 
   // Show different tabs based on role
   const isStudent = user?.role === 'student';
   const isTeacher = user?.role === 'teacher';
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
   const isAdminOrTeacher = isAdmin || isTeacher;
+
+  // Redirect admins away from tabs layout
+  if (isAdmin) {
+    router.replace('/admin');
+    return null;
+  }
 
   return (
     <Tabs
@@ -25,16 +33,6 @@ export default function TabLayout() {
         headerShown: false,
         tabBarButton: HapticTab,
       }}>
-      {isAdmin && (
-        <Tabs.Screen
-          name="admin"
-          options={{
-            title: 'Admin',
-            tabBarIcon: ({ color }) => <IconSymbol size={28} name="gearshape.fill" color={color} />,
-            href: '/admin',
-          }}
-        />
-      )}
       <Tabs.Screen
         name="index"
         options={{

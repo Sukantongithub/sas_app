@@ -11,9 +11,11 @@ import {
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/context/AuthContext';
+import AdminHeader from './AdminHeader';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -282,9 +284,9 @@ export default function TimetableManagementScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      <AdminHeader title="Timetable & Shifts Configuration" />
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
-          <ThemedText type="title">Timetable Management</ThemedText>
           <ThemedText style={styles.subtitle}>Total: {timetables.length} timetables</ThemedText>
         </View>
 
@@ -503,7 +505,6 @@ export default function TimetableManagementScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f7f8fa',
   },
   scrollView: {
     flex: 1,
@@ -526,7 +527,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   formContainer: {
-    backgroundColor: '#ffffff',
+    backgroundColor: Colors.dark.cardBackground,
     padding: 16,
     borderRadius: 14,
     marginBottom: 16,
@@ -536,22 +537,24 @@ const styles = StyleSheet.create({
   formTitle: {
     fontSize: 16,
     marginBottom: 12,
+    fontWeight: '600',
   },
   label: {
     fontSize: 12,
     fontWeight: '600',
     marginTop: 8,
     marginBottom: 8,
-    opacity: 0.7,
+    opacity: 0.8,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: Colors.dark.text + '30',
     borderRadius: 12,
     padding: 12,
     marginBottom: 12,
     fontSize: 14,
-    backgroundColor: '#f9fafb',
+    backgroundColor: Colors.dark.text + '10',
+    color: Colors.dark.text,
   },
   optionScroll: {
     marginBottom: 12,
@@ -563,7 +566,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: Colors.dark.text + '30',
     marginRight: 8,
   },
   optionButtonActive: {
@@ -578,12 +581,12 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   periodCard: {
-    backgroundColor: '#f9fafb',
+    backgroundColor: Colors.dark.text + '08',
     padding: 12,
     borderRadius: 12,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: Colors.dark.text + '20',
   },
   periodHeader: {
     flexDirection: 'row',
@@ -593,6 +596,7 @@ const styles = StyleSheet.create({
   },
   periodNumber: {
     fontSize: 14,
+    fontWeight: '600',
   },
   removeButton: {
     fontSize: 20,
@@ -675,10 +679,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   timetableCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: Colors.dark.cardBackground,
     padding: 16,
     borderRadius: 14,
     marginBottom: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#2196f3',
   },
   timetableHeader: {
     flexDirection: 'row',

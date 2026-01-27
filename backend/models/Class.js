@@ -190,6 +190,18 @@ const classSchema = new mongoose.Schema({
     requireApprovalForManualChanges: {
       type: Boolean,
       default: true
+    },
+
+    // Roles allowed to perform manual overrides
+    manualOverrideRoles: {
+      type: [String],
+      default: ['super_admin', 'admin', 'teacher'],
+    },
+
+    // Roles required to approve manual overrides
+    manualOverrideApprovalRoles: {
+      type: [String],
+      default: ['super_admin', 'admin'],
     }
   },
   
