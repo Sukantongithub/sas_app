@@ -20,6 +20,8 @@ const MAPPING = {
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
   'chevron.left': 'chevron-left',
+  'chevron.up': 'expand-less',
+  'chevron.down': 'expand-more',
   'arrow.right.square.fill': 'logout',
   
   // Actions
@@ -51,13 +53,17 @@ const MAPPING = {
   
   // Time & Calendar
   'calendar': 'calendar-today',
+  'calendar.badge.exclamationmark': 'event-busy',
   'clock.fill': 'access-time',
   'clock': 'schedule',
   
-  // Status
+  // Status Icons
   'checkmark.circle.fill': 'check-circle',
+  'checkmark.circle': 'check-circle-outline',
   'xmark.circle.fill': 'cancel',
+  'xmark.circle': 'highlight-off',
   'exclamationmark.triangle.fill': 'warning',
+  'questionmark.circle': 'help-outline',
 } as IconMapping;
 
 /**

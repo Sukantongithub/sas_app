@@ -20,9 +20,13 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['super_admin', 'admin', 'faculty', 'teacher', 'student'], // 'teacher' kept for backward compatibility
+    enum: ['super_admin', 'admin', 'faculty', 'teacher', 'student', 'parent', 'staff', 'hr'],
     default: 'student',
     required: true
+  },
+  phone: {
+    type: String,
+    trim: true
   },
   departmentId: {
     type: mongoose.Schema.Types.ObjectId,

@@ -66,15 +66,19 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
       console.log('AttendanceContext.refreshAttendance: Token available, fetching attendance with token:', token.substring(0, 20) + '...');
       setError(null);
       const data = await attendanceAPI.getAll(undefined, token);
-      // Map MongoDB format to app format
-      const mappedData = data.map((record: any) => ({
-        id: record._id,
-        studentId: record.studentId._id || record.studentId,
-        date: record.date,
-        status: record.status,
-        remarks: record.remarks,
-        markedAt: record.markedAt,
-      }));
+      // Map MongoDB format to app format with null safety
+      const mappedData = data
+        .filter((record: any) => record && record.studentId) // Skip records with missing studentId
+        .map((record: any) => ({
+          id: record._id,
+          studentId: typeof record.studentId === 'object' && record.studentId?._id 
+            ? record.studentId._id 
+            : record.studentId,
+          date: record.date,
+          status: record.status,
+          remarks: record.remarks,
+          markedAt: record.markedAt,
+        }));
       console.log('AttendanceContext.refreshAttendance: Successfully fetched', mappedData.length, 'records');
       setAttendanceRecords(mappedData);
     } catch (err: any) {

@@ -11,7 +11,12 @@ const connectDB = require('./config/database');
 const swaggerSpec = require('./config/swagger');
 const studentRoutes = require('./routes/students');
 const attendanceRoutes = require('./routes/attendance');
+const attendanceV2Routes = require('./routes/attendanceV2');
+const deviceRoutes = require('./routes/devices');
 const authRoutes = require('./routes/auth');
+const leaveRoutes = require('./routes/leaves');
+const notificationRoutes = require('./routes/notifications');
+const adminRoutes = require('./routes/admin');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -32,8 +37,13 @@ app.use(limiter);
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/attendance', attendanceRoutes);
+app.use('/api/attendance-v2', attendanceV2Routes);
+app.use('/api/devices', deviceRoutes);
+app.use('/api/leaves', leaveRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health
 app.get('/api/health', (req, res) => {
@@ -45,13 +55,25 @@ app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Root route
 app.get('/', (req, res) => {
-  res.json({ 
-    message: 'Attendance Management System API',
-    version: '1.0.0',
+  res.json({
+    name: 'Smart Attendance System API',
+    version: '2.0.0',
+    features: [
+      'BLE + Gyroscope verification',
+      'Parent notifications',
+      'Leave management',
+      'Daily attendance summary',
+      'Late arrival tracking',
+      'Multi-role access (Student, Teacher, Parent, Admin, Staff, HR)'
+    ],
     endpoints: {
       auth: '/api/auth',
       students: '/api/students',
       attendance: '/api/attendance',
+      attendanceV2: '/api/attendance-v2',
+      devices: '/api/devices',
+      leaves: '/api/leaves',
+      notifications: '/api/notifications',
       docs: '/api/docs'
     }
   });

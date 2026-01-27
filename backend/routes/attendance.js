@@ -2,6 +2,9 @@ const express = require('express');
 const router = express.Router();
 const Attendance = require('../models/Attendance');
 const Student = require('../models/Student');
+const Session = require('../models/Session');
+const Notification = require('../models/Notification');
+const Timetable = require('../models/Timetable');
 const { requireAuth, requireRoles, requireSelfOrRoles } = require('../middleware/auth');
 
 // Get all attendance records
@@ -184,6 +187,173 @@ router.get('/stats/all', requireAuth, requireRoles('super_admin', 'admin', 'facu
     const allStats = await Promise.all(statsPromises);
     res.json(allStats);
   } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// @route   GET /api/attendance/summary/daily
+// @desc    Get daily attendance summary
+// @access  Private (Teacher/Admin)
+router.get('/summary/daily', requireAuth, requireRoles('super_admin', 'admin', 'faculty', 'teacher'), async (req, res) => {
+  try {
+    const { date, classId, section } = req.query;
+    const targetDate = date ? new Date(date) : new Date();
+    const dateStr = targetDate.toISOString().split('T')[0];
+    
+    let studentQuery = {};
+    if (classId) studentQuery.classId = classId;
+    if (section) studentQuery.section = section;
+    
+    const students = await Student.find(studentQuery);
+    const totalStudents = students.length;
+    
+    const attendanceQuery = { date: dateStr };
+    if (classId) {
+      const studentIds = students.map(s => s._id);
+      attendanceQuery.studentId = { $in: studentIds };
+    }
+    
+    const records = await Attendance.find(attendanceQuery)
+      .populate('studentId', 'name rollNumber class section');
+    
+    const presentCount = records.filter(r => r.status === 'present').length;
+    const absentCount = records.filter(r => r.status === 'absent').length;
+    const lateCount = records.filter(r => r.status === 'late').length;
+    const unmarkedCount = totalStudents - records.length;
+    
+    const presentStudents = records.filter(r => r.status === 'present').map(r => r.studentId);
+    const absentStudents = records.filter(r => r.status === 'absent').map(r => r.studentId);
+    const lateStudents = records.filter(r => r.status === 'late').map(r => r.studentId);
+    
+    const markedStudentIds = records.map(r => r.studentId._id.toString());
+    const unmarkedStudents = students
+      .filter(s => !markedStudentIds.includes(s._id.toString()))
+      .map(s => ({ _id: s._id, name: s.name, rollNumber: s.rollNumber, class: s.class, section: s.section }));
+    
+    res.json({
+      date: dateStr,
+      summary: {
+        total: totalStudents,
+        present: presentCount,
+        absent: absentCount,
+        late: lateCount,
+        unmarked: unmarkedCount,
+        attendancePercentage: totalStudents > 0 ? ((presentCount / totalStudents) * 100).toFixed(2) : 0
+      },
+      details: {
+        presentStudents,
+        absentStudents,
+        lateStudents,
+        unmarkedStudents
+      }
+    });
+  } catch (error) {
+    console.error('Daily summary error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// @route   GET /api/attendance/late-arrivals
+// @desc    Get late arrival records with analysis
+// @access  Private (Teacher/Admin)
+router.get('/late-arrivals', requireAuth, requireRoles('super_admin', 'admin', 'faculty', 'teacher'), async (req, res) => {
+  try {
+    const { startDate, endDate, studentId, classId } = req.query;
+    
+    let query = { status: 'late' };
+    if (studentId) query.studentId = studentId;
+    
+    if (startDate || endDate) {
+      query.date = {};
+      if (startDate) query.date.$gte = startDate;
+      if (endDate) query.date.$lte = endDate;
+    }
+    
+    const lateRecords = await Attendance.find(query)
+      .populate('studentId', 'name rollNumber class section email')
+      .populate('sessionId', 'subject startTime')
+      .sort({ date: -1, entryTime: -1 });
+    
+    // Calculate late duration for each record
+    const enrichedRecords = lateRecords.map(record => {
+      let lateDuration = null;
+      if (record.sessionId && record.sessionId.startTime && record.entryTime) {
+        const sessionStart = new Date(record.date);
+        const [hours, minutes] = record.sessionId.startTime.split(':');
+        sessionStart.setHours(parseInt(hours), parseInt(minutes), 0);
+        
+        const entry = new Date(record.entryTime);
+        lateDuration = Math.floor((entry - sessionStart) / (1000 * 60)); // minutes
+      }
+      
+      return {
+        ...record.toObject(),
+        lateDuration
+      };
+    });
+    
+    // Group by student for summary
+    const studentSummary = {};
+    enrichedRecords.forEach(record => {
+      const studentId = record.studentId._id.toString();
+      if (!studentSummary[studentId]) {
+        studentSummary[studentId] = {
+          student: record.studentId,
+          lateCount: 0,
+          totalLateMinutes: 0,
+          records: []
+        };
+      }
+      studentSummary[studentId].lateCount++;
+      if (record.lateDuration) {
+        studentSummary[studentId].totalLateMinutes += record.lateDuration;
+      }
+      studentSummary[studentId].records.push(record);
+    });
+    
+    res.json({
+      records: enrichedRecords,
+      summary: Object.values(studentSummary)
+    });
+  } catch (error) {
+    console.error('Late arrivals error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// @route   GET /api/attendance/by-class/:classId
+// @desc    Get attendance filtered by class and section
+// @access  Private (Teacher/Admin)
+router.get('/by-class/:classId', requireAuth, requireRoles('super_admin', 'admin', 'faculty', 'teacher'), async (req, res) => {
+  try {
+    const { section, startDate, endDate } = req.query;
+    
+    let studentQuery = { classId: req.params.classId };
+    if (section) studentQuery.section = section;
+    
+    const students = await Student.find(studentQuery);
+    const studentIds = students.map(s => s._id);
+    
+    let attendanceQuery = { studentId: { $in: studentIds } };
+    if (startDate || endDate) {
+      attendanceQuery.date = {};
+      if (startDate) attendanceQuery.date.$gte = startDate;
+      if (endDate) attendanceQuery.date.$lte = endDate;
+    }
+    
+    const records = await Attendance.find(attendanceQuery)
+      .populate('studentId', 'name rollNumber class section')
+      .populate('sessionId', 'subject date startTime endTime')
+      .sort({ date: -1 });
+    
+    res.json({
+      students,
+      records,
+      totalStudents: students.length,
+      totalRecords: records.length
+    });
+  } catch (error) {
+    console.error('Get class attendance error:', error);
     res.status(500).json({ message: error.message });
   }
 });

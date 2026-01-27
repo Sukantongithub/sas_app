@@ -26,6 +26,39 @@ const studentSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  section: {
+    type: String,
+    trim: true,
+    default: 'A'
+  },
+  department: {
+    type: String,
+    trim: true
+  },
+  parentIds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  classId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Class'
+  },
+  dateOfBirth: {
+    type: Date
+  },
+  gender: {
+    type: String,
+    enum: ['male', 'female', 'other']
+  },
+  address: {
+    type: String,
+    trim: true
+  },
+  emergencyContact: {
+    name: String,
+    phone: String,
+    relation: String
+  },
   createdAt: {
     type: Date,
     default: Date.now

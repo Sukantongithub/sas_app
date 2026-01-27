@@ -10,9 +10,9 @@ function getToken(req) {
   if (req.body && req.body.token) return req.body.token;
   return null;
 }
-
+            
 // Verify JWT and attach user
-async function requireAuth(req, res, next) {
+const requireAuth = async (req, res, next) => {
   try {
     const header = req.headers.authorization || '';
     console.log('requireAuth: Authorization header present:', !!header, 'Header:', header.substring(0, 50) + '...');
@@ -26,8 +26,8 @@ async function requireAuth(req, res, next) {
 
     const decoded = jwt.verify(token, JWT_SECRET);
     console.log('requireAuth: Token verified, userId:', decoded.userId);
-    const user = await User.findById(decoded.userId).populate('studentId');
     
+    const user = await User.findById(decoded.userId).populate('studentId');
     console.log('requireAuth: User found:', user?.email, 'Role:', user?.role);
 
     if (!user) {
@@ -51,7 +51,7 @@ async function requireAuth(req, res, next) {
     }
     return res.status(401).json({ message: 'Invalid token' });
   }
-}
+};
 
 // Allow only specific roles
 function requireRoles(...roles) {
