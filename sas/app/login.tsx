@@ -110,18 +110,6 @@ export default function LoginScreen() {
             </ThemedText>
           </TouchableOpacity>
         </View>
-
-        <View style={styles.footer}>
-          <ThemedText style={styles.footerText}>
-            Demo Credentials:
-          </ThemedText>
-          <ThemedText style={styles.demoText}>
-            Admin: admin@school.com / admin123
-          </ThemedText>
-          <ThemedText style={styles.demoText}>
-            Teacher: teacher@school.com / teacher123
-          </ThemedText>
-        </View>
       </View>
     </ThemedView>
   );
@@ -196,23 +184,5 @@ const styles = StyleSheet.create({
   },
   registerTextBold: {
     fontWeight: '600',
-  },
-  footer: {
-    marginTop: 48,
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: 'rgba(128, 128, 128, 0.1)',
-    borderLeftWidth: 4,
-  },
-  footerText: {
-    fontSize: 12,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  demoText: {
-    fontSize: 11,
-    opacity: 0.7,
-    marginTop: 4,
-    fontFamily: 'monospace',
   },
 });
