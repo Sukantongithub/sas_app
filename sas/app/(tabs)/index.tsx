@@ -7,6 +7,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { studentManagementAPI } from '@/services/api';
+import CommonHeader from '@/components/CommonHeader';
 
 interface StudentProfile {
   id: string;
@@ -141,28 +142,7 @@ export default function StudentsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Gradient Hero Header */}
-      <View style={[styles.heroHeader, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '12' }]}>
-        <View style={styles.heroContent}>
-          <View style={{ flex: 1 }}>
-            <ThemedText type="title" style={styles.heroTitle}>Student Management</ThemedText>
-            <ThemedText style={styles.heroSubtitle}>Track attendance & manage requests</ThemedText>
-          </View>
-          <View style={styles.heroStats}>
-            <View style={styles.heroStat}>
-              <IconSymbol name="person.3.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
-              <ThemedText style={styles.heroStatNumber}>{students.length}</ThemedText>
-              <ThemedText style={styles.heroStatLabel}>Students</ThemedText>
-            </View>
-            <View style={styles.heroStatDivider} />
-            <View style={styles.heroStat}>
-              <IconSymbol name="bell.badge.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
-              <ThemedText style={styles.heroStatNumber}>{requests.length}</ThemedText>
-              <ThemedText style={styles.heroStatLabel}>Requests</ThemedText>
-            </View>
-          </View>
-        </View>
-      </View>
+      <CommonHeader title="Student Management" />
       
       {/* Segmented Control Style Tabs */}
       <View style={styles.segmentedControl}>

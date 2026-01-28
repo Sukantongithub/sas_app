@@ -7,6 +7,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/context/AuthContext';
 import { attendanceAPI } from '@/services/api';
+import CommonHeader from '@/components/CommonHeader';
 
 type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';
 
@@ -426,38 +427,7 @@ export default function StudentAttendanceScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      {/* Stats Overview Header */}
-      <View style={[styles.statsOverviewHeader, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '12' }]}>
-        <View style={styles.statsOverviewTitle}>
-          <View>
-            <ThemedText type="title" style={styles.overviewHeaderTitle}>My Attendance</ThemedText>
-            <ThemedText style={styles.overviewHeaderDate}>
-              {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-            </ThemedText>
-          </View>
-          <TouchableOpacity onPress={handleDownloadReport}>
-            <IconSymbol name="arrow.down.circle.fill" size={22} color={Colors[colorScheme ?? 'light'].tint} />
-          </TouchableOpacity>
-        </View>
-        {dailyData && dailyData.summary && (
-          <View style={styles.statsOverviewBar}>
-            <View style={styles.statOverviewItem}>
-              <ThemedText style={[styles.statOverviewNumber, { color: '#4CAF50' }]}>{dailyData.summary.present || 0}</ThemedText>
-              <ThemedText style={styles.statOverviewLabel}>Present</ThemedText>
-            </View>
-            <View style={styles.statOverviewDivider} />
-            <View style={styles.statOverviewItem}>
-              <ThemedText style={[styles.statOverviewNumber, { color: '#F44336' }]}>{dailyData.summary.absent || 0}</ThemedText>
-              <ThemedText style={styles.statOverviewLabel}>Absent</ThemedText>
-            </View>
-            <View style={styles.statOverviewDivider} />
-            <View style={styles.statOverviewItem}>
-              <ThemedText style={[styles.statOverviewNumber, { color: '#FF9800' }]}>{dailyData.summary.late || 0}</ThemedText>
-              <ThemedText style={styles.statOverviewLabel}>Late</ThemedText>
-            </View>
-          </View>
-        )}
-      </View>
+      <CommonHeader title="My Attendance" />
 
       {/* Tab Navigation */}
       <View style={styles.tabBar}>

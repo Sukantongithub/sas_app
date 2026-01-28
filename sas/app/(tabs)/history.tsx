@@ -8,6 +8,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AttendanceStats } from '@/types/attendance';
+import CommonHeader from '@/components/CommonHeader';
 
 type FilterType = 'all' | 'low' | 'high';
 type SortType = 'name' | 'percentage' | 'recent';
@@ -126,16 +127,7 @@ export default function HistoryScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      {/* Compact Filter Header */}
-      <View style={[styles.filterHeader, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '10' }]}>
-        <View style={styles.filterHeaderTop}>
-          <View>
-            <ThemedText type="title" style={styles.filterHeaderTitle}>Attendance History</ThemedText>
-            <ThemedText style={styles.filterHeaderSubtitle}>View records & analytics</ThemedText>
-          </View>
-          <IconSymbol name="chart.xyaxis.line" size={24} color={Colors[colorScheme ?? 'light'].tint} />
-        </View>
-      </View>
+      <CommonHeader title="Attendance History" />
 
       {isStudent ? (
         /* Student Message */

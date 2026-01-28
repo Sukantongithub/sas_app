@@ -7,6 +7,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/context/AuthContext';
 import { attendanceAPI } from '@/services/api';
+import CommonHeader from '@/components/CommonHeader';
 
 export default function TimetableScreen() {
   const colorScheme = useColorScheme();
@@ -68,23 +69,7 @@ export default function TimetableScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      {/* Timeline-Style Header */}
-      <View style={[styles.timelineHeader, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '12' }]}>
-        <View style={styles.timelineHeaderContent}>
-          <View style={styles.timelineIconContainer}>
-            <IconSymbol name="calendar.circle.fill" size={32} color={Colors[colorScheme ?? 'light'].tint} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <ThemedText type="title" style={styles.timelineTitle}>Weekly Schedule</ThemedText>
-            <ThemedText style={styles.timelineSubtitle}>
-              Class: {timetable?.student?.class || 'N/A'} • {timetable?.totalPeriods || 0} periods
-            </ThemedText>
-          </View>
-          <TouchableOpacity onPress={fetchTimetable}>
-            <IconSymbol name="arrow.clockwise" size={20} color={Colors[colorScheme ?? 'light'].tint} />
-          </TouchableOpacity>
-        </View>
-      </View>
+      <CommonHeader title="Weekly Schedule" />
 
       {loading ? (
         <View style={styles.loadingContainer}>

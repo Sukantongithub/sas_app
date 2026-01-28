@@ -6,6 +6,7 @@ import { useAttendance } from '@/context/AttendanceContext';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import CommonHeader from '@/components/CommonHeader';
 
 export default function MarkAttendanceScreen() {
   const colorScheme = useColorScheme();
@@ -88,41 +89,7 @@ export default function MarkAttendanceScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      {/* Progress Header - Creative Design */}
-      <View style={[styles.progressHeader, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '12' }]}>
-        <View style={styles.progressHeaderTop}>
-          <View>
-            <ThemedText type="title" style={styles.progressTitle}>Mark Attendance</ThemedText>
-            <ThemedText style={styles.progressDate}>
-              {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
-            </ThemedText>
-          </View>
-          <TouchableOpacity
-            style={[styles.markAllButton, { backgroundColor: Colors[colorScheme ?? 'light'].tint }]}
-            onPress={markAllPresent}
-            disabled={marking}>
-            <ThemedText style={styles.markAllButtonText}>
-              {marking ? '...' : 'Mark All'}
-            </ThemedText>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.progressBarContainer}>
-          <View style={styles.progressBarTrack}>
-            <View 
-              style={[
-                styles.progressBarFill,
-                { 
-                  width: `${stats.total > 0 ? (stats.present / stats.total) * 100 : 0}%`,
-                  backgroundColor: '#4CAF50'
-                }
-              ]} 
-            />
-          </View>
-          <ThemedText style={styles.progressBarLabel}>
-            {stats.present}/{stats.total} marked present
-          </ThemedText>
-        </View>
-      </View>
+      <CommonHeader title="Mark Attendance" />
 
       {/* Stats Row */}
       <View style={styles.statsRow}>

@@ -7,6 +7,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/context/AuthContext';
 import { studentInteractionsAPI } from '@/services/api';
+import CommonHeader from '@/components/CommonHeader';
 
 export default function MessagesScreen() {
   const colorScheme = useColorScheme();
@@ -92,23 +93,7 @@ export default function MessagesScreen() {
     <ThemedView style={styles.container}>
       {view === 'conversations' ? (
         <>
-          {/* Badge-Based Creative Header */}
-          <View style={[styles.badgeHeader, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '12' }]}>
-            <View style={styles.badgeHeaderContent}>
-              <View style={styles.badgeIconContainer}>
-                <IconSymbol name="bubble.left.and.bubble.right.fill" size={24} color={Colors[colorScheme ?? 'light'].tint} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <ThemedText type="title" style={styles.badgeHeaderTitle}>Messages</ThemedText>
-                <ThemedText style={styles.badgeHeaderSubtitle}>{conversations.length} {conversations.length === 1 ? 'conversation' : 'conversations'}</ThemedText>
-              </View>
-              {unreadCount > 0 && (
-                <View style={styles.unreadBadgeCircle}>
-                  <ThemedText style={styles.unreadBadgeText}>{unreadCount}</ThemedText>
-                </View>
-              )}
-            </View>
-          </View>
+          <CommonHeader title="Messages" />
 
           {loading ? (
             <View style={styles.loadingContainer}>

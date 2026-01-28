@@ -7,6 +7,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { router } from 'expo-router';
+import CommonHeader from '@/components/CommonHeader';
 
 export default function ProfileScreen() {
   const colorScheme = useColorScheme();
@@ -65,21 +66,7 @@ export default function ProfileScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      {/* Card-Style Compact Header */}
-      <View style={[styles.compactHeader, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '12' }]}>
-        <View style={styles.compactHeaderContent}>
-          <View style={styles.headerIconLeft}>
-            <IconSymbol name="person.crop.circle.fill" size={24} color={Colors[colorScheme ?? 'light'].tint} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <ThemedText type="title" style={styles.headerTitle}>My Profile</ThemedText>
-            <ThemedText style={styles.headerSubtitle}>{user?.role?.charAt(0).toUpperCase()}{user?.role?.slice(1)}</ThemedText>
-          </View>
-          <View style={styles.headerIconRight}>
-            <IconSymbol name="gear.circle.fill" size={24} color={Colors[colorScheme ?? 'light'].tint} />
-          </View>
-        </View>
-      </View>
+      <CommonHeader title="My Profile" />
 
       {/* Profile Info Card */}
       <ScrollView 

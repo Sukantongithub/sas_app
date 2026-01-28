@@ -60,28 +60,39 @@ export default function AdminHeader({ title }: AdminHeaderProps) {
 
   return (
     <>
-      {/* Header with Notifications and Role */}
-      <View style={[styles.headerBar, { backgroundColor: colors.cardBackground, borderBottomColor: colors.text }]}>
-        <View style={styles.headerLeft}>
-          <ThemedText type="defaultSemiBold" style={styles.roleText}>
-            {user?.role === 'super_admin' ? 'Super Admin' : 'Admin'}
-          </ThemedText>
-          {title && (
-            <ThemedText style={[styles.pageTitle, { color: colors.text, opacity: 0.7 }]}>
-              {title}
+      {/* Minimalist Inline Action Header */}
+      <View style={styles.inlineHeader}>
+        <View style={styles.inlineContent}>
+          <View style={styles.roleChip}>
+            <View style={[styles.roleIndicator, { backgroundColor: colors.tint }]} />
+            <ThemedText style={styles.roleChipText}>
+              {user?.role === 'super_admin' ? 'Super Admin' : 'Admin'}
             </ThemedText>
-          )}
+            {title && (
+              <>
+                <View style={styles.dividerDot} />
+                <ThemedText style={[styles.titleChipText, { color: colors.text }]}>{title}</ThemedText>
+              </>
+            )}
+          </View>
+          <View style={styles.actionBar}>
+            <TouchableOpacity
+              style={styles.bellButton}
+              onPress={() => setShowNotifications(!showNotifications)}>
+              <IconSymbol 
+                size={22} 
+                name={notificationCount > 0 ? "bell.badge.fill" : "bell"} 
+                color={notificationCount > 0 ? '#F44336' : colors.text} 
+              />
+              {notificationCount > 0 && (
+                <View style={styles.compactBadge}>
+                  <ThemedText style={styles.compactBadgeText}>{notificationCount}</ThemedText>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
-        <TouchableOpacity
-          style={styles.notificationButton}
-          onPress={() => setShowNotifications(!showNotifications)}>
-          <IconSymbol size={24} name="bell.fill" color={colors.tint} />
-          {notificationCount > 0 && (
-            <View style={[styles.notificationBadge, { backgroundColor: colors.tint }]}>
-              <ThemedText style={styles.badgeText}>{notificationCount}</ThemedText>
-            </View>
-          )}
-        </TouchableOpacity>
+        <View style={[styles.bottomBorder, { backgroundColor: colors.text }]} />
       </View>
 
       {/* Notifications Panel */}
@@ -135,6 +146,194 @@ export default function AdminHeader({ title }: AdminHeaderProps) {
 }
 
 const styles = StyleSheet.create({
+  inlineHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
+  },
+  inlineContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 10,
+  },
+  roleChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  roleIndicator: {
+    width: 4,
+    height: 24,
+    borderRadius: 2,
+  },
+  roleChipText: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+  },
+  dividerDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(128, 128, 128, 0.3)',
+  },
+  titleChipText: {
+    fontSize: 14,
+    opacity: 0.6,
+    fontWeight: '500',
+  },
+  actionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  bellButton: {
+    position: 'relative',
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  compactBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#F44336',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  compactBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  bottomBorder: {
+    height: 1,
+    opacity: 0.08,
+  },
+  headerContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  elevatedCard: {
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  cardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  leftSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    flex: 1,
+  },
+  adminBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#007AFF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  adminBadgeText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  titleSection: {
+    flex: 1,
+    gap: 4,
+  },
+  adminRole: {
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+  },
+  breadcrumb: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  breadcrumbText: {
+    fontSize: 12,
+    opacity: 0.6,
+    fontWeight: '500',
+  },
+  rightSection: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  notificationIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  notificationIconActive: {
+    backgroundColor: 'rgba(244, 67, 54, 0.08)',
+  },
+  notificationStack: {
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pulseBadge: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    shadowColor: '#F44336',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 6,
+  },
+  pulseText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  gradientHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 16,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   headerBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -144,34 +343,51 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   headerLeft: {
-    flexDirection: 'column',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  roleIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   roleText: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '700',
+    marginBottom: 2,
   },
   pageTitle: {
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: 13,
+    opacity: 0.6,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    gap: 8,
   },
   notificationButton: {
     position: 'relative',
     padding: 8,
+    borderRadius: 10,
   },
   notificationBadge: {
     position: 'absolute',
-    top: 0,
-    right: 0,
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
+    top: 2,
+    right: 2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 4,
   },
   badgeText: {
     color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
+    fontSize: 10,
+    fontWeight: '700',
   },
   notificationPanel: {
     position: 'absolute',
