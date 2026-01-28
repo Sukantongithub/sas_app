@@ -17,6 +17,7 @@ const authRoutes = require('./routes/auth');
 const leaveRoutes = require('./routes/leaves');
 const notificationRoutes = require('./routes/notifications');
 const adminRoutes = require('./routes/admin');
+const studentInteractionsRoutes = require('./routes/student-interactions');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -44,6 +45,7 @@ app.use('/api/attendance-v2', attendanceV2Routes);
 app.use('/api/devices', deviceRoutes);
 app.use('/api/leaves', leaveRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/student-interactions', studentInteractionsRoutes);
 
 // Health
 app.get('/api/health', (req, res) => {

@@ -1,4 +1,5 @@
-import { StyleSheet, View, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, ScrollView, Alert, Platform } from 'react-native';
+import { useEffect } from 'react';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/context/AuthContext';
@@ -11,16 +12,41 @@ export default function ProfileScreen() {
   const colorScheme = useColorScheme();
   const { user, logout } = useAuth();
 
+  useEffect(() => {
+    console.log('ProfileScreen mounted');
+    console.log('User:', user);
+    console.log('Logout function type:', typeof logout);
+    console.log('Logout function:', logout);
+  }, []);
+
   const handleLogout = async () => {
+    console.log('===== LOGOUT BUTTON CLICKED =====');
+    console.log('handleLogout called');
+    console.log('logout function exists:', typeof logout);
+    console.log('user:', user);
+    console.log('Platform:', Platform.OS);
+    
+    // Optional confirmation for web
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm('Are you sure you want to logout?');
+      console.log('Web confirm result:', confirmed);
+      if (!confirmed) {
+        console.log('Logout cancelled');
+        return;
+      }
+    }
+    
     try {
+      console.log('Profile: About to call logout()');
       await logout();
-      // Navigate to login only after logout completes
-      router.replace('/login');
+      console.log('Profile: logout() completed successfully');
     } catch (error: any) {
-      console.error('Logout error:', error);
-      Alert.alert('Error', error?.message || 'Logout failed. Please try again.');
-      // Still navigate to login even if logout fails on backend
-      router.replace('/login');
+      console.error('Profile: Logout error:', error);
+      if (Platform.OS === 'web') {
+        window.alert('Logout failed: ' + (error?.message || 'Please try again'));
+      } else {
+        Alert.alert('Error', error?.message || 'Logout failed. Please try again.');
+      }
     }
   };
 
@@ -100,9 +126,13 @@ export default function ProfileScreen() {
         )}
       </ThemedView>
 
+      {/* Logout Button */}
       <TouchableOpacity
         style={[styles.logoutButton, { backgroundColor: '#F44336' }]}
-        onPress={handleLogout}>
+        onPress={() => {
+          console.log('LOGOUT BUTTON ONPRESS TRIGGERED');
+          handleLogout();
+        }}>
         <IconSymbol name="arrow.right.square.fill" size={20} color="#fff" />
         <ThemedText style={styles.logoutText}>Logout</ThemedText>
       </TouchableOpacity>

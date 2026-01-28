@@ -162,9 +162,20 @@ router.post('/verify', requireAuth, async (req, res) => {
   }
 });
 
-// Logout (JWT is stateless; client removes token. We accept missing/invalid token and always return success.)
-router.post('/logout', requireAuth, async (req, res) => {
+// Logout (JWT is stateless; client removes token. Accept any request since token is cleared client-side.)
+router.post('/logout', async (req, res) => {
   try {
+    // Optional: could log the logout event if user is authenticated
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        console.log('User logged out:', decoded.userId);
+      } catch (err) {
+        // Token invalid or expired, but that's ok for logout
+        console.log('Logout with invalid/expired token');
+      }
+    }
     res.json({ message: 'Logged out successfully', success: true });
   } catch (error) {
     console.error('Logout error:', error);

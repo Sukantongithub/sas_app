@@ -24,7 +24,7 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { token, isAuthenticated, loading: authLoading } = useAuth();
+  const { token, isAuthenticated, loading: authLoading, user } = useAuth();
 
   const refreshStudents = React.useCallback(async () => {
     try {
@@ -89,7 +89,7 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
 
   // Load students and attendance when auth is complete and token is available
   useEffect(() => {
-    console.log('AttendanceContext.useEffect: authLoading=', authLoading, 'isAuthenticated=', isAuthenticated, 'hasToken=', !!token);
+    console.log('AttendanceContext.useEffect: authLoading=', authLoading, 'isAuthenticated=', isAuthenticated, 'hasToken=', !!token, 'userRole=', user?.role);
     
     if (authLoading) {
       console.log('AttendanceContext: Auth still loading, waiting...');
@@ -103,10 +103,19 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    console.log('AttendanceContext: Auth complete with valid token, fetching data');
+    // Only load all students and attendance for teachers/admins
+    // Students will load their own data through the student-attendance screen
+    const canViewAllData = user?.role && ['admin', 'super_admin', 'teacher', 'faculty'].includes(user.role);
+    
+    if (!canViewAllData) {
+      console.log('AttendanceContext: User is student, skipping bulk data load');
+      return;
+    }
+
+    console.log('AttendanceContext: Auth complete with valid token and appropriate role, fetching data');
     refreshStudents();
     refreshAttendance();
-  }, [authLoading, isAuthenticated, token, refreshStudents, refreshAttendance]);
+  }, [authLoading, isAuthenticated, token, user?.role, refreshStudents, refreshAttendance]);
 
   const addStudent = async (student: Omit<Student, 'id'>) => {
     try {

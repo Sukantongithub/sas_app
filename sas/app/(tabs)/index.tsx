@@ -3,6 +3,7 @@ import { StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, View } from
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAttendance } from '@/context/AttendanceContext';
+import { useAuth } from '@/context/AuthContext';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -10,6 +11,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 export default function StudentsScreen() {
   const colorScheme = useColorScheme();
   const { students, addStudent, deleteStudent, loading, error } = useAttendance();
+  const { user } = useAuth();
   const [isAdding, setIsAdding] = useState(false);
   const [newStudent, setNewStudent] = useState({
     name: '',
@@ -18,6 +20,10 @@ export default function StudentsScreen() {
     class: '',
   });
 
+  // Check if user has permission to manage students
+  const canManageStudents = user?.role && ['admin', 'super_admin', 'teacher', 'faculty'].includes(user.role);
+  const isStudent = user?.role === 'student';
+
   const stats = {
     total: students.length,
     withEmail: students.filter((s) => !!s.email).length,
@@ -25,6 +31,11 @@ export default function StudentsScreen() {
   };
 
   const handleAddStudent = async () => {
+    if (!canManageStudents) {
+      Alert.alert('Access Denied', 'You do not have permission to add students');
+      return;
+    }
+
     if (!newStudent.name || !newStudent.rollNumber || !newStudent.class) {
       Alert.alert('Error', 'Please fill in all required fields');
       return;
@@ -41,6 +52,11 @@ export default function StudentsScreen() {
   };
 
   const handleDeleteStudent = (id: string, name: string) => {
+    if (!canManageStudents) {
+      Alert.alert('Access Denied', 'You do not have permission to delete students');
+      return;
+    }
+
     Alert.alert(
       'Delete Student',
       `Are you sure you want to delete ${name}?`,
@@ -64,14 +80,30 @@ export default function StudentsScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <ThemedView style={styles.header}>
-        <ThemedText type="title">Students</ThemedText>
-        <TouchableOpacity
-          style={[styles.addButton, { backgroundColor: Colors[colorScheme ?? 'light'].tint }]}
-          onPress={() => setIsAdding(!isAdding)}>
-          <IconSymbol name={isAdding ? 'xmark' : 'plus'} size={20} color="#fff" />
-        </TouchableOpacity>
-      </ThemedView>
+      {/* Show access denied message for students */}
+      {isStudent ? (
+        <ThemedView style={styles.accessDeniedContainer}>
+          <IconSymbol name="exclamationmark.shield.fill" size={64} color="#F44336" />
+          <ThemedText type="title" style={styles.accessDeniedTitle}>Access Restricted</ThemedText>
+          <ThemedText style={styles.accessDeniedText}>
+            Students do not have permission to view or manage student records.
+          </ThemedText>
+          <ThemedText style={styles.accessDeniedHint}>
+            Use the "My Attendance" tab to view your own attendance information.
+          </ThemedText>
+        </ThemedView>
+      ) : (
+        <>
+          <ThemedView style={styles.header}>
+            <ThemedText type="title">Students</ThemedText>
+            {canManageStudents && (
+              <TouchableOpacity
+                style={[styles.addButton, { backgroundColor: Colors[colorScheme ?? 'light'].tint }]}
+                onPress={() => setIsAdding(!isAdding)}>
+                <IconSymbol name={isAdding ? 'xmark' : 'plus'} size={20} color="#fff" />
+              </TouchableOpacity>
+            )}
+          </ThemedView>
 
       <ThemedView style={styles.statsRow}>
         <View style={styles.statCard}>
@@ -180,6 +212,8 @@ export default function StudentsScreen() {
           </ThemedView>
         ))}
       </ThemedView>
+        </>
+      )}
     </ScrollView>
   );
 }
@@ -188,6 +222,31 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
+  },
+  accessDeniedContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+    marginTop: 100,
+  },
+  accessDeniedTitle: {
+    marginTop: 24,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  accessDeniedText: {
+    textAlign: 'center',
+    fontSize: 16,
+    opacity: 0.8,
+    lineHeight: 24,
+    marginBottom: 16,
+  },
+  accessDeniedHint: {
+    textAlign: 'center',
+    fontSize: 14,
+    opacity: 0.6,
+    fontStyle: 'italic',
   },
   header: {
     flexDirection: 'row',

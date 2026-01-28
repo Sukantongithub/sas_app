@@ -99,35 +99,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    console.log('\n========================================');
+    console.log('LOGOUT FUNCTION CALLED');
+    console.log('========================================');
+    console.log('Current state - user:', user?.email, 'token exists:', !!token);
+    
     try {
-      console.log('Logout: Starting logout process');
-      // Capture token before clearing
+      // Capture token before clearing state
       const currentToken = token;
+      console.log('Token captured:', currentToken ? 'YES' : 'NO');
 
-      // Best-effort call to backend first
+      // Call backend logout API first (before clearing state)
       if (currentToken) {
         try {
-          console.log('Logout: Calling logout API with JWT token');
+          console.log('Calling backend logout API...');
           await authAPI.logout(currentToken);
-          console.log('Logout: API call completed');
+          console.log('Backend logout API: SUCCESS');
         } catch (error) {
-          console.error('Logout API error (continuing with client-side logout):', error);
+          console.error('Backend logout API: FAILED (continuing)', error);
         }
+      } else {
+        console.log('No token, skipping API call');
       }
 
-      // Clear local session
-      await clearSession();
-      console.log('Logout: Local session cleared');
-
-      // Ensure AsyncStorage is fully cleared
+      // Clear AsyncStorage
+      console.log('Clearing AsyncStorage...');
       await AsyncStorage.removeItem(TOKEN_KEY);
       await AsyncStorage.removeItem(USER_KEY);
-      console.log('Logout: AsyncStorage cleared');
-    } catch (error) {
-      console.error('Logout error:', error);
-      // Force clear state even if async storage fails
-      setToken(null);
+      console.log('AsyncStorage: CLEARED');
+
+      // Clear state - this should trigger re-render and navigation
+      console.log('Clearing state...');
       setUser(null);
+      setToken(null);
+      console.log('State: CLEARED');
+      console.log('isAuthenticated should now be: false');
+      console.log('========================================\n');
+    } catch (error) {
+      console.error('\n!!! LOGOUT ERROR !!!', error);
+      // Force clear everything even if there's an error
+      try {
+        await AsyncStorage.removeItem(TOKEN_KEY);
+        await AsyncStorage.removeItem(USER_KEY);
+      } catch (storageError) {
+        console.error('AsyncStorage clear error:', storageError);
+      }
+      setUser(null);
+      setToken(null);
+      console.log('Force cleared state despite error\n');
     }
   };
 

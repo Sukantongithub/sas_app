@@ -74,17 +74,48 @@ function requireRoles(...roles) {
 function requireSelfOrRoles(options = {}) {
   const { studentParam = 'studentId', roles = [] } = options;
   return (req, res, next) => {
+    console.log('requireSelfOrRoles: User role:', req.user?.role);
+    console.log('requireSelfOrRoles: Allowed roles:', roles);
+    console.log('requireSelfOrRoles: Param name:', studentParam);
+    
     if (!req.user) {
+      console.log('requireSelfOrRoles: No user on request');
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
     const studentIdFromParam = req.params[studentParam] || req.body[studentParam];
-    const isSelf = studentIdFromParam && req.user.studentId && String(req.user.studentId._id || req.user.studentId) === String(studentIdFromParam);
+    console.log('requireSelfOrRoles: studentIdFromParam:', studentIdFromParam);
+    console.log('requireSelfOrRoles: req.user._id:', req.user._id);
+    console.log('requireSelfOrRoles: req.user.studentId:', req.user.studentId);
 
-    if (isSelf || roles.includes(req.user.role)) {
+    // Check if user has required role
+    if (roles.includes(req.user.role)) {
+      console.log('requireSelfOrRoles: User has required role');
       return next();
     }
 
+    // Check if student is accessing their own data
+    // The studentIdFromParam could be either:
+    // 1. The User's _id (when student logs in, they might use their user ID)
+    // 2. The User's studentId (reference to Student document)
+    const userIdStr = String(req.user._id);
+    const userStudentIdStr = req.user.studentId ? String(req.user.studentId._id || req.user.studentId) : null;
+    const paramIdStr = String(studentIdFromParam);
+
+    const isSelfByUserId = paramIdStr === userIdStr;
+    const isSelfByStudentId = userStudentIdStr && paramIdStr === userStudentIdStr;
+    const isSelf = isSelfByUserId || isSelfByStudentId;
+
+    console.log('requireSelfOrRoles: isSelfByUserId:', isSelfByUserId);
+    console.log('requireSelfOrRoles: isSelfByStudentId:', isSelfByStudentId);
+    console.log('requireSelfOrRoles: isSelf:', isSelf);
+
+    if (isSelf) {
+      console.log('requireSelfOrRoles: User is accessing own data');
+      return next();
+    }
+
+    console.log('requireSelfOrRoles: Access denied');
     return res.status(403).json({ message: 'Forbidden: insufficient permission' });
   };
 }

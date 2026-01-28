@@ -68,6 +68,200 @@ router.get('/student/:studentId', requireAuth, requireSelfOrRoles({ roles: ['sup
   }
 });
 
+// @route   GET /api/attendance/student/:studentId/daily
+// @desc    Get student's daily attendance status
+// @access  Private (Student can view own, others as per auth)
+router.get('/student/:studentId/daily', requireAuth, requireSelfOrRoles({ roles: ['super_admin', 'admin', 'faculty', 'teacher'] }), async (req, res) => {
+  try {
+    const { date } = req.query;
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    
+    const records = await Attendance.find({ 
+      studentId: req.params.studentId,
+      date: targetDate 
+    })
+      .populate('sessionId', 'subject startTime endTime periodNumber')
+      .sort({ entryTime: 1 });
+    
+    res.json({
+      date: targetDate,
+      records,
+      summary: {
+        totalPeriods: records.length,
+        present: records.filter(r => r.status === 'present').length,
+        absent: records.filter(r => r.status === 'absent').length,
+        late: records.filter(r => r.status === 'late').length
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// @route   GET /api/attendance/student/:studentId/subject-wise
+// @desc    Get subject/period-wise attendance for a student
+// @access  Private (Student can view own, others as per auth)
+router.get('/student/:studentId/subject-wise', requireAuth, requireSelfOrRoles({ roles: ['super_admin', 'admin', 'faculty', 'teacher'] }), async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    
+    let query = { studentId: req.params.studentId };
+    if (startDate || endDate) {
+      query.date = {};
+      if (startDate) query.date.$gte = startDate;
+      if (endDate) query.date.$lte = endDate;
+    }
+    
+    const records = await Attendance.find(query)
+      .populate('sessionId', 'subject startTime endTime periodNumber')
+      .sort({ date: -1 });
+    
+    // Group by subject
+    const subjectStats = {};
+    records.forEach(record => {
+      if (!record.sessionId) return;
+      
+      const subject = record.sessionId.subject || 'Unknown';
+      if (!subjectStats[subject]) {
+        subjectStats[subject] = {
+          subject,
+          total: 0,
+          present: 0,
+          absent: 0,
+          late: 0,
+          percentage: 0
+        };
+      }
+      
+      subjectStats[subject].total++;
+      if (record.status === 'present') subjectStats[subject].present++;
+      if (record.status === 'absent') subjectStats[subject].absent++;
+      if (record.status === 'late') subjectStats[subject].late++;
+    });
+    
+    // Calculate percentages
+    Object.values(subjectStats).forEach(stat => {
+      stat.percentage = stat.total > 0 ? parseFloat(((stat.present / stat.total) * 100).toFixed(2)) : 0;
+    });
+    
+    res.json({
+      subjectWise: Object.values(subjectStats),
+      records
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// @route   GET /api/attendance/student/:studentId/monthly
+// @desc    Get monthly attendance percentage for a student
+// @access  Private (Student can view own, others as per auth)
+router.get('/student/:studentId/monthly', requireAuth, requireSelfOrRoles({ roles: ['super_admin', 'admin', 'faculty', 'teacher'] }), async (req, res) => {
+  try {
+    const { year, month } = req.query;
+    const targetYear = year ? parseInt(year) : new Date().getFullYear();
+    const targetMonth = month ? parseInt(month) : new Date().getMonth() + 1;
+    
+    // Create date range for the month
+    const startDate = new Date(targetYear, targetMonth - 1, 1);
+    const endDate = new Date(targetYear, targetMonth, 0);
+    
+    const records = await Attendance.find({
+      studentId: req.params.studentId,
+      date: {
+        $gte: startDate.toISOString().split('T')[0],
+        $lte: endDate.toISOString().split('T')[0]
+      }
+    })
+      .populate('sessionId', 'subject')
+      .sort({ date: 1 });
+    
+    // Group by date
+    const dailyStats = {};
+    records.forEach(record => {
+      const dateStr = record.date;
+      if (!dailyStats[dateStr]) {
+        dailyStats[dateStr] = {
+          date: dateStr,
+          total: 0,
+          present: 0,
+          absent: 0,
+          late: 0
+        };
+      }
+      
+      dailyStats[dateStr].total++;
+      if (record.status === 'present') dailyStats[dateStr].present++;
+      if (record.status === 'absent') dailyStats[dateStr].absent++;
+      if (record.status === 'late') dailyStats[dateStr].late++;
+    });
+    
+    // Calculate overall monthly stats
+    const totalClasses = records.length;
+    const presentCount = records.filter(r => r.status === 'present').length;
+    const absentCount = records.filter(r => r.status === 'absent').length;
+    const lateCount = records.filter(r => r.status === 'late').length;
+    const percentage = totalClasses > 0 ? parseFloat(((presentCount / totalClasses) * 100).toFixed(2)) : 0;
+    
+    res.json({
+      month: targetMonth,
+      year: targetYear,
+      monthlyStats: {
+        totalClasses,
+        present: presentCount,
+        absent: absentCount,
+        late: lateCount,
+        percentage
+      },
+      dailyBreakdown: Object.values(dailyStats),
+      records
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// @route   GET /api/attendance/student/:studentId/time-records
+// @desc    Get in-time and out-time records for a student
+// @access  Private (Student can view own, others as per auth)
+router.get('/student/:studentId/time-records', requireAuth, requireSelfOrRoles({ roles: ['super_admin', 'admin', 'faculty', 'teacher'] }), async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    
+    let query = { studentId: req.params.studentId };
+    if (startDate || endDate) {
+      query.date = {};
+      if (startDate) query.date.$gte = startDate;
+      if (endDate) query.date.$lte = endDate;
+    }
+    
+    const records = await Attendance.find(query)
+      .populate('sessionId', 'subject startTime endTime')
+      .sort({ date: -1, entryTime: -1 });
+    
+    // Format time records
+    const timeRecords = records.map(record => ({
+      _id: record._id,
+      date: record.date,
+      subject: record.sessionId ? record.sessionId.subject : 'N/A',
+      scheduledStart: record.sessionId ? record.sessionId.startTime : null,
+      scheduledEnd: record.sessionId ? record.sessionId.endTime : null,
+      entryTime: record.entryTime,
+      exitTime: record.exitTime,
+      duration: record.duration,
+      status: record.status,
+      verificationMethod: record.verificationMethod
+    }));
+    
+    res.json({
+      records: timeRecords,
+      totalRecords: timeRecords.length
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Mark attendance (create or update)
 router.post('/', requireAuth, requireRoles('super_admin', 'admin', 'faculty', 'teacher'), async (req, res) => {
   try {
@@ -355,6 +549,169 @@ router.get('/by-class/:classId', requireAuth, requireRoles('super_admin', 'admin
   } catch (error) {
     console.error('Get class attendance error:', error);
     res.status(500).json({ message: error.message });
+  }
+});
+
+// ============================================
+// STUDENT FEATURES: TIMETABLE & REPORTS
+// ============================================
+
+// @route   GET /api/attendance/student/:studentId/timetable
+// @desc    Get student's timetable
+// @access  Private (Student, Teacher, Admin)
+router.get('/student/:studentId/timetable', requireAuth, requireSelfOrRoles(['student', 'teacher', 'admin']), async (req, res) => {
+  try {
+    const { studentId } = req.params;
+
+    // Get student to find class
+    const student = await Student.findById(studentId);
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    // Get timetable for student's class
+    const timetable = await Timetable.find({ class: student.class })
+      .populate('subjectId', 'name code')
+      .sort({ day: 1, period: 1 });
+
+    // Group by day
+    const groupedTimetable = {};
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    
+    days.forEach(day => {
+      groupedTimetable[day] = timetable.filter(t => t.day === day);
+    });
+
+    res.json({
+      student: {
+        id: student._id,
+        name: student.name,
+        rollNumber: student.rollNumber,
+        class: student.class,
+      },
+      timetable: groupedTimetable,
+      totalPeriods: timetable.length,
+    });
+  } catch (error) {
+    console.error('Get timetable error:', error);
+    res.status(500).json({ message: 'Error fetching timetable', error: error.message });
+  }
+});
+
+// @route   GET /api/attendance/student/:studentId/report
+// @desc    Generate attendance report (CSV format)
+// @access  Private (Student, Teacher, Admin)
+router.get('/student/:studentId/report', requireAuth, requireSelfOrRoles(['student', 'teacher', 'admin']), async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const { format = 'csv' } = req.query; // csv or json
+
+    // Get student details
+    const student = await Student.findById(studentId);
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    // Get attendance records
+    const records = await Attendance.find({ studentId })
+      .populate('sessionId', 'subject period')
+      .sort({ date: 1 });
+
+    // Calculate statistics
+    const totalClasses = records.length;
+    const presentCount = records.filter(r => r.status === 'present').length;
+    const absentCount = records.filter(r => r.status === 'absent').length;
+    const lateCount = records.filter(r => r.status === 'late').length;
+    const attendancePercentage = totalClasses > 0 ? ((presentCount / totalClasses) * 100).toFixed(2) : 0;
+
+    // Subject-wise attendance
+    const subjectWiseData = {};
+    records.forEach(record => {
+      const subject = record.sessionId?.subject || 'Unknown';
+      if (!subjectWiseData[subject]) {
+        subjectWiseData[subject] = { total: 0, present: 0, absent: 0, late: 0 };
+      }
+      subjectWiseData[subject].total++;
+      if (record.status === 'present') subjectWiseData[subject].present++;
+      else if (record.status === 'absent') subjectWiseData[subject].absent++;
+      else if (record.status === 'late') subjectWiseData[subject].late++;
+    });
+
+    // Calculate subject percentages
+    const subjectPercentages = {};
+    Object.keys(subjectWiseData).forEach(subject => {
+      const data = subjectWiseData[subject];
+      subjectPercentages[subject] = {
+        ...data,
+        percentage: data.total > 0 ? ((data.present / data.total) * 100).toFixed(2) : 0,
+      };
+    });
+
+    const reportData = {
+      studentDetails: {
+        name: student.name,
+        rollNumber: student.rollNumber,
+        email: student.email,
+        phone: student.phone,
+        class: student.class,
+        generatedDate: new Date().toISOString().split('T')[0],
+      },
+      summary: {
+        totalClasses,
+        present: presentCount,
+        absent: absentCount,
+        late: lateCount,
+        attendancePercentage: parseFloat(attendancePercentage),
+      },
+      subjectWiseAttendance: subjectPercentages,
+      detailedRecords: records.map(r => ({
+        date: r.date,
+        subject: r.sessionId?.subject || 'N/A',
+        status: r.status,
+        markedAt: r.markedAt,
+        remarks: r.remarks || '',
+      })),
+    };
+
+    if (format === 'json') {
+      return res.json(reportData);
+    }
+
+    // Generate CSV format
+    let csv = 'ATTENDANCE REPORT\n';
+    csv += `Student Name: ${reportData.studentDetails.name}\n`;
+    csv += `Roll Number: ${reportData.studentDetails.rollNumber}\n`;
+    csv += `Email: ${reportData.studentDetails.email}\n`;
+    csv += `Class: ${reportData.studentDetails.class}\n`;
+    csv += `Generated: ${reportData.studentDetails.generatedDate}\n\n`;
+
+    csv += 'ATTENDANCE SUMMARY\n';
+    csv += `Total Classes: ${reportData.summary.totalClasses}\n`;
+    csv += `Present: ${reportData.summary.present}\n`;
+    csv += `Absent: ${reportData.summary.absent}\n`;
+    csv += `Late: ${reportData.summary.late}\n`;
+    csv += `Overall Attendance: ${reportData.summary.attendancePercentage}%\n\n`;
+
+    csv += 'SUBJECT-WISE ATTENDANCE\n';
+    csv += 'Subject,Total,Present,Absent,Late,Percentage\n';
+    Object.keys(reportData.subjectWiseAttendance).forEach(subject => {
+      const data = reportData.subjectWiseAttendance[subject];
+      csv += `${subject},${data.total},${data.present},${data.absent},${data.late},${data.percentage}%\n`;
+    });
+
+    csv += '\nDETAILED RECORDS\n';
+    csv += 'Date,Subject,Status,Marked At,Remarks\n';
+    reportData.detailedRecords.forEach(record => {
+      csv += `${record.date},${record.subject},${record.status},${record.markedAt},${record.remarks}\n`;
+    });
+
+    // Set response headers for file download
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="Attendance_Report_${student.rollNumber}_${new Date().toISOString().split('T')[0]}.csv"`);
+    res.send(csv);
+  } catch (error) {
+    console.error('Generate report error:', error);
+    res.status(500).json({ message: 'Error generating report', error: error.message });
   }
 });
 

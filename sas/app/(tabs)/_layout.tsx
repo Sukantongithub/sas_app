@@ -50,10 +50,50 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="student-attendance"
+        options={{
+          title: 'My Attendance',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="chart.bar.fill" color={color} />,
+          href: isStudent ? '/(tabs)/student-attendance' : null,
+        }}
+      />
+      <Tabs.Screen
+        name="admin"
+        options={{
+          title: 'Admin',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.badge.shield.checkmark.fill" color={color} />,
+          href: null, // Admin tab should not be accessible from tabs - admins are redirected to /admin
+        }}
+      />
+      <Tabs.Screen
         name="history"
         options={{
-          title: isStudent ? 'My Attendance' : 'History',
+          title: isStudent ? 'History' : 'History',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="clock.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="interactions"
+        options={{
+          title: 'Requests',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="bubble.left.and.bubble.right.fill" color={color} />,
+          href: isStudent ? '/(tabs)/interactions' : null,
+        }}
+      />
+      <Tabs.Screen
+        name="timetable"
+        options={{
+          title: 'Timetable',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="calendar.circle.fill" color={color} />,
+          href: isStudent ? '/(tabs)/timetable' : null,
+        }}
+      />
+      <Tabs.Screen
+        name="alerts"
+        options={{
+          title: 'Alerts',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="bell.fill" color={color} />,
+          href: isStudent ? '/(tabs)/alerts' : null,
         }}
       />
       <Tabs.Screen

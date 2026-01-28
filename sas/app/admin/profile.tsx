@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, ScrollView, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, ScrollView, StyleSheet, TouchableOpacity, Alert, Platform } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -15,17 +15,50 @@ export default function ProfileScreen() {
   const { user, logout } = useAuth();
   const router = useRouter();
 
-  const handleLogout = () => {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
-      { text: 'Cancel', onPress: () => {} },
-      {
-        text: 'Logout',
-        onPress: async () => {
-          await logout();
-          router.replace('/login');
+  useEffect(() => {
+    console.log('Admin ProfileScreen mounted');
+    console.log('Admin User:', user);
+    console.log('Admin Logout function type:', typeof logout);
+    console.log('Admin Logout function:', logout);
+  }, []);
+
+  const handleLogout = async () => {
+    console.log('===== ADMIN LOGOUT BUTTON CLICKED =====');
+    console.log('handleLogout called');
+    console.log('logout function exists:', typeof logout);
+    console.log('user:', user);
+    console.log('Platform:', Platform.OS);
+    
+    // Use window.confirm on web, Alert.alert on native
+    let confirmed = false;
+    
+    if (Platform.OS === 'web') {
+      confirmed = window.confirm('Are you sure you want to logout?');
+      console.log('Web confirm result:', confirmed);
+    } else {
+      // For native platforms, use Alert.alert
+      Alert.alert('Logout', 'Are you sure you want to logout?', [
+        { text: 'Cancel', onPress: () => console.log('Logout cancelled') },
+        {
+          text: 'Logout',
+          onPress: async () => {
+            confirmed = true;
+          },
         },
-      },
-    ]);
+      ]);
+    }
+    
+    if (confirmed) {
+      console.log('Admin Profile: Logout confirmed, calling logout()');
+      try {
+        await logout();
+        console.log('Admin Profile: logout() completed successfully');
+      } catch (error) {
+        console.error('Admin Profile: Logout error:', error);
+      }
+    } else {
+      console.log('Logout cancelled or not confirmed');
+    }
   };
 
   const ProfileCard = ({ label, value }: { label: string; value: string }) => (
@@ -97,7 +130,10 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <TouchableOpacity
             style={[styles.logoutButton, { backgroundColor: '#ff4444' }]}
-            onPress={handleLogout}>
+            onPress={() => {
+              console.log('ADMIN LOGOUT BUTTON ONPRESS TRIGGERED');
+              handleLogout();
+            }}>
             <IconSymbol size={20} name="arrow.right.square.fill" color="#fff" />
             <ThemedText style={styles.logoutButtonText}>Logout</ThemedText>
           </TouchableOpacity>

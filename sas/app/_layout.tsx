@@ -36,27 +36,43 @@ function RootLayoutNav() {
   const router = useRouter();
 
   useEffect(() => {
-    if (loading) return;
+    if (loading) {
+      console.log('_layout: Still loading, skipping navigation');
+      return;
+    }
 
     const inTabsGroup = segments[0] === '(tabs)';
     const inAdminGroup = segments[0] === 'admin';
     const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
 
+    console.log('_layout: Navigation check', {
+      isAuthenticated,
+      userRole: user?.role,
+      currentSegment: segments[0],
+      inTabsGroup,
+      inAdminGroup,
+      isAdmin
+    });
+
     if (!isAuthenticated && segments[0] !== 'login' && segments[0] !== 'register') {
       // Redirect to login if not authenticated
+      console.log('_layout: Not authenticated, redirecting to login');
       router.replace('/login');
     } else if (isAuthenticated && (segments[0] === 'login' || segments[0] === 'register')) {
       // Redirect to appropriate dashboard based on role
       if (isAdmin) {
+        console.log('_layout: Authenticated admin on login/register, redirecting to admin');
         router.replace('/admin');
       } else {
+        console.log('_layout: Authenticated user on login/register, redirecting to tabs');
         router.replace('/(tabs)');
       }
     } else if (isAuthenticated && isAdmin && inTabsGroup) {
       // Redirect admin users away from tabs to admin panel
+      console.log('_layout: Admin in tabs, redirecting to admin panel');
       router.replace('/admin');
     }
-  }, [isAuthenticated, user?.role, segments, loading]);
+  }, [isAuthenticated, user?.role, segments, loading, router]);
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
