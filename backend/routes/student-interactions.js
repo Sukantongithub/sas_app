@@ -7,6 +7,7 @@ const Attendance = require('../models/Attendance');
 const Notification = require('../models/Notification');
 const Student = require('../models/Student');
 const { requireAuth, requireRoles, requireSelfOrRoles } = require('../middleware/auth');
+const { asyncHandler, handleError, ROLE_GROUPS } = require('../utils/routeHelpers');
 
 // ============================================
 // ABSENCE REASON REQUESTS
@@ -72,7 +73,6 @@ router.post('/absence-reason', requireAuth, async (req, res) => {
       absenceReason
     });
   } catch (error) {
-    console.error('Submit absence reason error:', error);
     res.status(500).json({ message: 'Error submitting absence reason', error: error.message });
   }
 });
@@ -99,7 +99,6 @@ router.get('/absence-reasons/:studentId', requireAuth, requireSelfOrRoles({ role
 
     res.json(reasons);
   } catch (error) {
-    console.error('Get absence reasons error:', error);
     res.status(500).json({ message: 'Error fetching absence reasons', error: error.message });
   }
 });
@@ -154,7 +153,6 @@ router.post('/leave', requireAuth, async (req, res) => {
       leave
     });
   } catch (error) {
-    console.error('Submit leave error:', error);
     res.status(500).json({ message: 'Error submitting leave application', error: error.message });
   }
 });
@@ -177,7 +175,6 @@ router.get('/leaves/:studentId', requireAuth, requireSelfOrRoles({ roles: ['supe
 
     res.json(leaves);
   } catch (error) {
-    console.error('Get leaves error:', error);
     res.status(500).json({ message: 'Error fetching leave applications', error: error.message });
   }
 });
@@ -247,7 +244,6 @@ router.get('/exam-eligibility/:studentId', requireAuth, requireSelfOrRoles({ rol
         : `You need ${classesNeeded} more classes with 100% attendance to become eligible`
     });
   } catch (error) {
-    console.error('Get exam eligibility error:', error);
     res.status(500).json({ message: 'Error checking exam eligibility', error: error.message });
   }
 });
@@ -308,7 +304,6 @@ router.get('/low-attendance-check/:studentId', requireAuth, requireSelfOrRoles({
         : `Your attendance is ${percentage.toFixed(1)}%, which meets the requirement`
     });
   } catch (error) {
-    console.error('Low attendance check error:', error);
     res.status(500).json({ message: 'Error checking attendance', error: error.message });
   }
 });
@@ -335,7 +330,6 @@ router.get('/notifications/:studentId', requireAuth, requireSelfOrRoles({ roles:
       unreadCount
     });
   } catch (error) {
-    console.error('Get notifications error:', error);
     res.status(500).json({ message: 'Error fetching notifications', error: error.message });
   }
 });
@@ -361,7 +355,6 @@ router.put('/notifications/:id/read', requireAuth, async (req, res) => {
 
     res.json({ message: 'Notification marked as read', notification });
   } catch (error) {
-    console.error('Mark notification read error:', error);
     res.status(500).json({ message: 'Error updating notification', error: error.message });
   }
 });
@@ -402,7 +395,6 @@ router.post('/on-duty', requireAuth, async (req, res) => {
       onDuty 
     });
   } catch (error) {
-    console.error('Submit on-duty error:', error);
     res.status(500).json({ message: 'Error submitting on-duty request', error: error.message });
   }
 });
@@ -431,7 +423,6 @@ router.get('/on-duty/:studentId', requireAuth, requireSelfOrRoles(['student', 't
       onDutyRequests 
     });
   } catch (error) {
-    console.error('Get on-duty requests error:', error);
     res.status(500).json({ message: 'Error fetching on-duty requests', error: error.message });
   }
 });
@@ -471,7 +462,6 @@ router.put('/on-duty/:id/approve', requireAuth, requireRoles(['teacher', 'admin'
 
     res.json({ message: 'On-duty request approved', onDuty });
   } catch (error) {
-    console.error('Approve on-duty error:', error);
     res.status(500).json({ message: 'Error approving on-duty request', error: error.message });
   }
 });
@@ -511,7 +501,6 @@ router.put('/on-duty/:id/reject', requireAuth, requireRoles(['teacher', 'admin',
 
     res.json({ message: 'On-duty request rejected', onDuty });
   } catch (error) {
-    console.error('Reject on-duty error:', error);
     res.status(500).json({ message: 'Error rejecting on-duty request', error: error.message });
   }
 });

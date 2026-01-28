@@ -12,7 +12,6 @@ async function sendAbsentAlert(attendance) {
   try {
     const student = await Student.findById(attendance.studentId).populate('parentIds');
     if (!student || !student.parentIds || student.parentIds.length === 0) {
-      console.log('No parent found for student:', student?.name);
       return;
     }
     
@@ -38,10 +37,8 @@ async function sendAbsentAlert(attendance) {
         ['app', 'sms'] // Send via app and SMS
       );
     }
-    
-    console.log(`Absent alert sent to ${student.parentIds.length} parent(s) for ${student.name}`);
   } catch (error) {
-    console.error('Error sending absent alert:', error);
+    // Silent fail - notifications are not critical
   }
 }
 
@@ -78,10 +75,8 @@ async function sendLateAlert(attendance) {
         ['app', 'sms']
       );
     }
-    
-    console.log(`Late alert sent to ${student.parentIds.length} parent(s) for ${student.name}`);
   } catch (error) {
-    console.error('Error sending late alert:', error);
+    // Silent fail - notifications are not critical
   }
 }
 
@@ -118,7 +113,7 @@ async function sendAttendanceMarkedAlert(attendance) {
       );
     }
   } catch (error) {
-    console.error('Error sending attendance marked alert:', error);
+    // Silent fail - notifications are not critical
   }
 }
 
@@ -165,12 +160,10 @@ async function checkAndSendLowAttendanceAlerts(threshold = 75) {
             ['app', 'sms']
           );
         }
-        
-        console.log(`Low attendance alert sent for ${student.name}: ${percentage.toFixed(2)}%`);
       }
     }
   } catch (error) {
-    console.error('Error checking low attendance:', error);
+    // Silent fail - notifications are not critical
   }
 }
 
@@ -215,10 +208,8 @@ async function sendBatchAbsentAlerts(sessionId) {
         );
       }
     }
-    
-    console.log(`Batch absent alerts sent for ${absentStudents.length} students in session ${sessionId}`);
   } catch (error) {
-    console.error('Error sending batch absent alerts:', error);
+    // Silent fail - notifications are not critical
   }
 }
 

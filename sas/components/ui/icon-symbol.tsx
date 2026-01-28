@@ -66,6 +66,10 @@ const MAPPING = {
   'clock.fill': 'access-time',
   'clock': 'schedule',
   
+  // Notifications & Alerts
+  'bell': 'notifications-none',
+  'bell.fill': 'notifications',
+  
   // Status Icons
   'checkmark.circle.fill': 'check-circle',
   'checkmark.circle': 'check-circle-outline',

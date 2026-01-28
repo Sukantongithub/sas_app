@@ -61,14 +61,14 @@ export default function TabLayout() {
         name="admin"
         options={{
           title: 'Admin',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.badge.shield.checkmark.fill" color={color} />,
-          href: null, // Admin tab should not be accessible from tabs - admins are redirected to /admin
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="lock.shield.fill" color={color} />,
+          href: null,
         }}
       />
       <Tabs.Screen
         name="history"
         options={{
-          title: isStudent ? 'History' : 'History',
+          title: 'History',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="clock.fill" color={color} />,
         }}
       />
@@ -76,7 +76,7 @@ export default function TabLayout() {
         name="interactions"
         options={{
           title: 'Requests',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="bubble.left.and.bubble.right.fill" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="envelope.fill" color={color} />,
           href: isStudent ? '/(tabs)/interactions' : null,
         }}
       />
@@ -84,16 +84,16 @@ export default function TabLayout() {
         name="timetable"
         options={{
           title: 'Timetable',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="calendar.circle.fill" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="calendar.fill" color={color} />,
           href: isStudent ? '/(tabs)/timetable' : null,
         }}
       />
       <Tabs.Screen
         name="alerts"
         options={{
-          title: 'Alerts',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="bell.fill" color={color} />,
-          href: isStudent ? '/(tabs)/alerts' : null,
+          title: 'Messages',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="envelope.fill" color={color} />,
+          href: '/(tabs)/alerts',
         }}
       />
       <Tabs.Screen

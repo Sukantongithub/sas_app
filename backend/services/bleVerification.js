@@ -29,12 +29,16 @@ function calculateDistance(rssi, txPower = -59) {
 
 /**
  * Verify BLE proximity based on RSSI
+ * @param {Object} bleData - BLE scan data
+ * @param {Object} session - Session object
+ * @returns {Promise<Object>} Verification result
  */
 async function verifyBLEProximity(bleData, session) {
   const errors = [];
-  
-  // Check if RSSI is within acceptable range
   const rssiThreshold = session.bleSettings?.rssiThreshold || -70;
+  const maxDistance = session.bleSettings?.maxDistance || 3;
+  
+  // Check RSSI threshold
   if (bleData.rssi < rssiThreshold) {
     errors.push({
       type: 'distance_anomaly',
@@ -45,9 +49,8 @@ async function verifyBLEProximity(bleData, session) {
     });
   }
   
-  // Calculate distance
+  // Calculate and verify distance
   const distance = calculateDistance(bleData.rssi, bleData.txPower || -59);
-  const maxDistance = session.bleSettings?.maxDistance || 3; // meters
   
   if (distance > maxDistance) {
     errors.push({
@@ -369,7 +372,6 @@ async function verifyAttendance(studentId, sessionId, bleData, motionData, locat
       device: deviceCheck.device
     };
   } catch (error) {
-    console.error('Verification error:', error);
     return {
       verified: false,
       error: error.message

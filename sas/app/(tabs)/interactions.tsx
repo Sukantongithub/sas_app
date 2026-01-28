@@ -458,10 +458,6 @@ export default function StudentInteractionsScreen() {
       style={styles.container}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
-      <ThemedView style={styles.header}>
-        <ThemedText type="title">Interactions</ThemedText>
-      </ThemedView>
-
       {/* Tab Navigation */}
       <ThemedView style={styles.tabContainer}>
         <TouchableOpacity
@@ -510,10 +506,6 @@ export default function StudentInteractionsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  header: {
-    padding: 20,
-    paddingTop: 60,
   },
   tabContainer: {
     flexDirection: 'row',

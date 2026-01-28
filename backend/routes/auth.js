@@ -62,9 +62,6 @@ router.post('/register',
       }
     });
   } catch (error) {
-    console.error('Registration error:', error);
-    console.error('Request body:', req.body);
-    
     // Handle validation errors
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map(err => err.message);
@@ -90,35 +87,27 @@ router.post('/login',
   async (req, res) => {
   try {
     const { email, password } = req.body;
-    console.log('Login attempt for email:', email);
 
     // Find user
     const user = await User.findOne({ email }).populate('studentId');
     if (!user) {
-      console.log('User not found:', email);
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
-    console.log('User found:', user.email, 'Role:', user.role);
-
     // Check if user is active
     if (!user.isActive) {
-      console.log('User account is disabled:', email);
       return res.status(403).json({ message: 'Account is disabled. Contact administrator.' });
     }
 
     // Verify password
     const isMatch = await user.comparePassword(password);
-    console.log('Password match:', isMatch);
     
     if (!isMatch) {
-      console.log('Password mismatch for user:', email);
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
     // Generate JWT token
     const token = generateToken(user._id);
-    console.log('JWT token generated');
 
     // Update last login
     user.lastLogin = new Date();
@@ -137,7 +126,6 @@ router.post('/login',
       }
     });
   } catch (error) {
-    console.error('Login error:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -157,25 +145,13 @@ router.post('/verify', requireAuth, async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Verify error:', error);
     res.status(500).json({ message: error.message });
   }
 });
 
-// Logout (JWT is stateless; client removes token. Accept any request since token is cleared client-side.)
+// Logout (JWT is stateless; client removes token)
 router.post('/logout', async (req, res) => {
   try {
-    // Optional: could log the logout event if user is authenticated
-    const token = req.headers.authorization?.replace('Bearer ', '');
-    if (token) {
-      try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        console.log('User logged out:', decoded.userId);
-      } catch (err) {
-        // Token invalid or expired, but that's ok for logout
-        console.log('Logout with invalid/expired token');
-      }
-    }
     res.json({ message: 'Logged out successfully', success: true });
   } catch (error) {
     console.error('Logout error:', error);

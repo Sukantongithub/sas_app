@@ -456,3 +456,266 @@ export const studentInteractionsAPI = {
   },
 };
 
+// Messaging API
+export const messagingAPI = {
+  getConversations: async (userId: string, params?: any, token?: string) => {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page);
+    if (params?.limit) queryParams.append('limit', params.limit);
+
+    const url = queryParams.toString()
+      ? `${API_BASE_URL}/messages/${userId}/conversations?${queryParams}`
+      : `${API_BASE_URL}/messages/${userId}/conversations`;
+
+    const response = await fetchWithTimeout(url, {
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+
+  getConversationMessages: async (conversationId: string, page?: number, limit?: number, token?: string) => {
+    const queryParams = new URLSearchParams();
+    if (page) queryParams.append('page', page.toString());
+    if (limit) queryParams.append('limit', limit.toString());
+
+    const url = queryParams.toString()
+      ? `${API_BASE_URL}/messages/conversation/${conversationId}/messages?${queryParams}`
+      : `${API_BASE_URL}/messages/conversation/${conversationId}/messages`;
+
+    const response = await fetchWithTimeout(url, {
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+
+  sendMessage: async (recipientId: string, content: string, attachments?: any[], token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/messages/send`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders(token),
+      },
+      body: JSON.stringify({ recipientId, content, attachments }),
+    });
+    return handleResponse(response);
+  },
+
+  createConversation: async (participantIds: string[], token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/messages/conversation/create`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders(token),
+      },
+      body: JSON.stringify({ participantIds }),
+    });
+    return handleResponse(response);
+  },
+
+  deleteConversation: async (conversationId: string, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/messages/${conversationId}`, {
+      method: 'DELETE',
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+
+  reactToMessage: async (messageId: string, reaction: string, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/messages/${messageId}/react`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders(token),
+      },
+      body: JSON.stringify({ reaction }),
+    });
+    return handleResponse(response);
+  },
+
+  searchMessages: async (query: string, conversationId?: string, token?: string) => {
+    const queryParams = new URLSearchParams();
+    if (conversationId) queryParams.append('conversationId', conversationId);
+
+    const url = queryParams.toString()
+      ? `${API_BASE_URL}/messages/search/${query}?${queryParams}`
+      : `${API_BASE_URL}/messages/search/${query}`;
+
+    const response = await fetchWithTimeout(url, {
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+
+  pinMessage: async (messageId: string, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/messages/${messageId}/pin`, {
+      method: 'POST',
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+
+  getPinnedMessages: async (conversationId: string, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/messages/${conversationId}/pinned`, {
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+};
+
+// Student Management API
+export const studentManagementAPI = {
+  // Manage Students
+  listStudents: async (params?: any, token?: string) => {
+    const queryParams = new URLSearchParams();
+    if (params?.class) queryParams.append('class', params.class);
+    if (params?.department) queryParams.append('department', params.department);
+    if (params?.search) queryParams.append('search', params.search);
+    if (params?.page) queryParams.append('page', params.page);
+    if (params?.limit) queryParams.append('limit', params.limit);
+    if (params?.status) queryParams.append('status', params.status);
+
+    const url = queryParams.toString()
+      ? `${API_BASE_URL}/student-management/list?${queryParams}`
+      : `${API_BASE_URL}/student-management/list`;
+
+    const response = await fetchWithTimeout(url, {
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+
+  getStudentProfile: async (studentId: string, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/student-management/${studentId}/profile`, {
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+
+  updateStudent: async (studentId: string, data: any, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/student-management/${studentId}/update`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders(token),
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  updateStudentStatus: async (studentId: string, isActive: boolean, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/student-management/${studentId}/status`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders(token),
+      },
+      body: JSON.stringify({ isActive }),
+    });
+    return handleResponse(response);
+  },
+
+  // Request Approval
+  getPendingRequests: async (studentId: string, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/student-management/${studentId}/pending-requests`, {
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+
+  getApprovalQueue: async (type?: string, priority?: string, token?: string) => {
+    const queryParams = new URLSearchParams();
+    if (type) queryParams.append('type', type);
+    if (priority) queryParams.append('priority', priority);
+
+    const url = queryParams.toString()
+      ? `${API_BASE_URL}/student-management/requests/approval-queue?${queryParams}`
+      : `${API_BASE_URL}/student-management/requests/approval-queue`;
+
+    const response = await fetchWithTimeout(url, {
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+
+  approveRequest: async (requestId: string, comments?: string, priority?: string, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/student-management/requests/${requestId}/approve`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders(token),
+      },
+      body: JSON.stringify({ comments, priority }),
+    });
+    return handleResponse(response);
+  },
+
+  rejectRequest: async (requestId: string, reason: string, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/student-management/requests/${requestId}/reject`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders(token),
+      },
+      body: JSON.stringify({ reason }),
+    });
+    return handleResponse(response);
+  },
+
+  // Student Features & Info
+  getAcademicInfo: async (studentId: string, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/student-management/${studentId}/academic-info`, {
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+
+  getPerformance: async (studentId: string, startDate?: string, endDate?: string, token?: string) => {
+    const queryParams = new URLSearchParams();
+    if (startDate) queryParams.append('startDate', startDate);
+    if (endDate) queryParams.append('endDate', endDate);
+
+    const url = queryParams.toString()
+      ? `${API_BASE_URL}/student-management/${studentId}/performance?${queryParams}`
+      : `${API_BASE_URL}/student-management/${studentId}/performance`;
+
+    const response = await fetchWithTimeout(url, {
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+
+  getDocuments: async (studentId: string, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/student-management/${studentId}/documents`, {
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+
+  generateCertificate: async (studentId: string, certificateType: string, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/student-management/${studentId}/generate-certificate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders(token),
+      },
+      body: JSON.stringify({ certificateType }),
+    });
+    return handleResponse(response);
+  },
+
+  getNotifications: async (studentId: string, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/student-management/${studentId}/notifications`, {
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+
+  getSchedule: async (studentId: string, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/student-management/${studentId}/schedule`, {
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+};
+

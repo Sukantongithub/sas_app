@@ -14,38 +14,27 @@ function getToken(req) {
 // Verify JWT and attach user
 const requireAuth = async (req, res, next) => {
   try {
-    const header = req.headers.authorization || '';
-    console.log('requireAuth: Authorization header present:', !!header, 'Header:', header.substring(0, 50) + '...');
     const token = getToken(req);
-    console.log('requireAuth: Token extracted:', !!token);
     
     if (!token) {
-      console.log('requireAuth: No token found, returning 401');
       return res.status(401).json({ message: 'Authorization token required' });
     }
 
     const decoded = jwt.verify(token, JWT_SECRET);
-    console.log('requireAuth: Token verified, userId:', decoded.userId);
-    
     const user = await User.findById(decoded.userId).populate('studentId');
-    console.log('requireAuth: User found:', user?.email, 'Role:', user?.role);
 
     if (!user) {
-      console.log('requireAuth: User not found in database');
       return res.status(401).json({ message: 'User not found' });
     }
 
     if (!user.isActive) {
-      console.log('requireAuth: User account is disabled');
       return res.status(403).json({ message: 'Account is disabled' });
     }
 
     req.user = user;
     req.token = token;
-    console.log('requireAuth: User attached to request, calling next');
     next();
   } catch (error) {
-    console.error('requireAuth: Error:', error.message);
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({ message: 'Token expired' });
     }
@@ -56,16 +45,12 @@ const requireAuth = async (req, res, next) => {
 // Allow only specific roles
 function requireRoles(...roles) {
   return (req, res, next) => {
-    console.log('requireRoles: Checking roles:', roles, 'User role:', req.user?.role);
     if (!req.user) {
-      console.log('requireRoles: No user on request');
       return res.status(401).json({ message: 'Unauthorized' });
     }
     if (!roles.includes(req.user.role)) {
-      console.log('requireRoles: User role', req.user.role, 'not in allowed roles', roles);
       return res.status(403).json({ message: 'Forbidden: insufficient role' });
     }
-    console.log('requireRoles: User role authorized');
     next();
   };
 }
@@ -74,23 +59,14 @@ function requireRoles(...roles) {
 function requireSelfOrRoles(options = {}) {
   const { studentParam = 'studentId', roles = [] } = options;
   return (req, res, next) => {
-    console.log('requireSelfOrRoles: User role:', req.user?.role);
-    console.log('requireSelfOrRoles: Allowed roles:', roles);
-    console.log('requireSelfOrRoles: Param name:', studentParam);
-    
     if (!req.user) {
-      console.log('requireSelfOrRoles: No user on request');
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
     const studentIdFromParam = req.params[studentParam] || req.body[studentParam];
-    console.log('requireSelfOrRoles: studentIdFromParam:', studentIdFromParam);
-    console.log('requireSelfOrRoles: req.user._id:', req.user._id);
-    console.log('requireSelfOrRoles: req.user.studentId:', req.user.studentId);
 
     // Check if user has required role
     if (roles.includes(req.user.role)) {
-      console.log('requireSelfOrRoles: User has required role');
       return next();
     }
 
@@ -102,20 +78,12 @@ function requireSelfOrRoles(options = {}) {
     const userStudentIdStr = req.user.studentId ? String(req.user.studentId._id || req.user.studentId) : null;
     const paramIdStr = String(studentIdFromParam);
 
-    const isSelfByUserId = paramIdStr === userIdStr;
-    const isSelfByStudentId = userStudentIdStr && paramIdStr === userStudentIdStr;
-    const isSelf = isSelfByUserId || isSelfByStudentId;
-
-    console.log('requireSelfOrRoles: isSelfByUserId:', isSelfByUserId);
-    console.log('requireSelfOrRoles: isSelfByStudentId:', isSelfByStudentId);
-    console.log('requireSelfOrRoles: isSelf:', isSelf);
+    const isSelf = paramIdStr === userIdStr || (userStudentIdStr && paramIdStr === userStudentIdStr);
 
     if (isSelf) {
-      console.log('requireSelfOrRoles: User is accessing own data');
       return next();
     }
 
-    console.log('requireSelfOrRoles: Access denied');
     return res.status(403).json({ message: 'Forbidden: insufficient permission' });
   };
 }
