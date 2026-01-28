@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
+import { StyleSheet, FlatList, View, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -67,34 +67,42 @@ export default function TimetableScreen() {
   }
 
   return (
-    <ScrollView 
-      style={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-    >
-      {/* Header */}
-      <ThemedView style={styles.header}>
-        <View>
-          <ThemedText type="title">Timetable</ThemedText>
-          <ThemedText style={styles.headerSubtitle}>Class: {timetable?.student?.class}</ThemedText>
+    <ThemedView style={styles.container}>
+      {/* Timeline-Style Header */}
+      <View style={[styles.timelineHeader, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '12' }]}>
+        <View style={styles.timelineHeaderContent}>
+          <View style={styles.timelineIconContainer}>
+            <IconSymbol name="calendar.circle.fill" size={32} color={Colors[colorScheme ?? 'light'].tint} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <ThemedText type="title" style={styles.timelineTitle}>Weekly Schedule</ThemedText>
+            <ThemedText style={styles.timelineSubtitle}>
+              Class: {timetable?.student?.class || 'N/A'} • {timetable?.totalPeriods || 0} periods
+            </ThemedText>
+          </View>
+          <TouchableOpacity onPress={fetchTimetable}>
+            <IconSymbol name="arrow.clockwise" size={20} color={Colors[colorScheme ?? 'light'].tint} />
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={fetchTimetable}>
-          <IconSymbol name="arrow.clockwise" size={24} color={Colors[colorScheme ?? 'light'].tint} />
-        </TouchableOpacity>
-      </ThemedView>
+      </View>
 
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors[colorScheme ?? 'light'].tint} />
         </View>
       ) : timetable ? (
-        <View style={styles.content}>
-          {days.map((day) => {
+        <FlatList
+          data={days}
+          keyExtractor={(day) => day}
+          contentContainerStyle={styles.listContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          renderItem={({ item: day }) => {
             const dayClasses = timetable.timetable?.[day] || [];
             const hasClasses = dayClasses.length > 0;
 
             return (
-              <ThemedView key={day} style={styles.dayCard}>
-                <ThemedText type="subtitle" style={styles.dayTitle}>{day}</ThemedText>
+              <ThemedView style={[styles.dayCard, { marginHorizontal: 16 }]}>
+                <ThemedText type="defaultSemiBold" style={styles.dayTitle}>{day}</ThemedText>
                 
                 {hasClasses ? (
                   <View style={styles.classesContainer}>
@@ -117,19 +125,22 @@ export default function TimetableScreen() {
                 )}
               </ThemedView>
             );
-          })}
-
-          <ThemedView style={styles.summaryCard}>
-            <IconSymbol name="info.circle" size={20} color={Colors[colorScheme ?? 'light'].tint} />
-            <View style={styles.summaryContent}>
-              <ThemedText type="defaultSemiBold">Total Periods</ThemedText>
-              <ThemedText style={styles.summaryValue}>{timetable.totalPeriods} periods per week</ThemedText>
-            </View>
-          </ThemedView>
-        </View>
+          }}
+          ListFooterComponent={
+            timetable.totalPeriods ? (
+              <ThemedView style={[styles.summaryCard, { marginHorizontal: 16 }]}>
+                <IconSymbol name="info.circle.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
+                <View style={styles.summaryContent}>
+                  <ThemedText type="defaultSemiBold">Total Periods</ThemedText>
+                  <ThemedText style={styles.summaryValue}>{timetable.totalPeriods} periods per week</ThemedText>
+                </View>
+              </ThemedView>
+            ) : null
+          }
+        />
       ) : (
         <View style={styles.emptyState}>
-          <IconSymbol name="calendar" size={48} color="#999" />
+          <IconSymbol name="calendar" size={48} color={Colors[colorScheme ?? 'light'].text} />
           <ThemedText style={styles.emptyText}>No timetable data available</ThemedText>
           <TouchableOpacity 
             style={[styles.retryButton, { backgroundColor: Colors[colorScheme ?? 'light'].tint }]}
@@ -138,7 +149,7 @@ export default function TimetableScreen() {
           </TouchableOpacity>
         </View>
       )}
-    </ScrollView>
+    </ThemedView>
   );
 }
 
@@ -147,75 +158,123 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    padding: 20,
-    paddingTop: 60,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 10,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  headerSubtitle: {
-    fontSize: 14,
-    opacity: 0.6,
-    marginTop: 4,
+  timelineHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 14,
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 18,
   },
-  content: {
-    padding: 16,
+  timelineHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  timelineIconContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: 'rgba(128, 128, 128, 0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  timelineTitle: {
+    marginBottom: 2,
+  },
+  timelineSubtitle: {
+    fontSize: 12,
+    opacity: 0.6,
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    opacity: 0.6,
+    marginTop: 2,
+  },
+  refreshButton: {
+    padding: 8,
+  },
+  listContent: {
+    paddingTop: 8,
+    paddingBottom: 20,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 50,
   },
   dayCard: {
-    marginBottom: 16,
+    marginBottom: 10,
+    marginTop: 2,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 12,
-    padding: 16,
+    backgroundColor: 'rgba(128, 128, 128, 0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 2,
   },
   dayTitle: {
-    marginBottom: 12,
-    fontSize: 18,
+    marginBottom: 8,
+    fontSize: 15,
+    fontWeight: '600',
   },
   classesContainer: {
-    gap: 10,
+    gap: 8,
   },
   classItem: {
-    padding: 12,
-    borderRadius: 8,
-    borderLeftWidth: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderLeftWidth: 3,
     borderLeftColor: '#007AFF',
   },
   periodInfo: {
-    gap: 4,
+    gap: 2,
   },
   period: {
-    fontSize: 11,
+    fontSize: 10,
     opacity: 0.6,
     fontWeight: '600',
     textTransform: 'uppercase',
   },
   subject: {
-    fontSize: 15,
+    fontSize: 14,
   },
   code: {
-    fontSize: 12,
+    fontSize: 11,
     opacity: 0.7,
   },
   noClasses: {
-    fontSize: 13,
+    fontSize: 12,
     opacity: 0.6,
     fontStyle: 'italic',
     textAlign: 'center',
-    paddingVertical: 20,
+    paddingVertical: 16,
   },
   summaryCard: {
     flexDirection: 'row',
-    padding: 14,
-    borderRadius: 10,
-    marginTop: 20,
-    marginBottom: 20,
-    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+    marginTop: 8,
+    gap: 10,
     alignItems: 'center',
+    backgroundColor: 'rgba(128, 128, 128, 0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 2,
   },
   summaryContent: {
     flex: 1,
@@ -223,28 +282,28 @@ const styles = StyleSheet.create({
   summaryValue: {
     fontSize: 12,
     opacity: 0.7,
-    marginTop: 4,
+    marginTop: 2,
   },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 40,
-    marginTop: 60,
+    flex: 1,
+    gap: 12,
+    paddingVertical: 40,
   },
   emptyText: {
-    marginTop: 12,
     opacity: 0.6,
     fontSize: 14,
   },
   retryButton: {
-    marginTop: 20,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
+    marginTop: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
   },
   retryButtonText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
 });

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, Alert, ActivityIndicator, RefreshControl } from 'react-native';
+import { StyleSheet, FlatList, View, TouchableOpacity, TextInput, Alert, ActivityIndicator, RefreshControl } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -454,37 +454,40 @@ export default function StudentInteractionsScreen() {
   }
 
   return (
-    <ScrollView 
-      style={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-    >
+    <ThemedView style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <ThemedText type="title">Requests</ThemedText>
+        <ThemedText style={styles.subtitle}>Leave, Absence & Duties</ThemedText>
+      </View>
+
       {/* Tab Navigation */}
-      <ThemedView style={styles.tabContainer}>
+      <View style={styles.tabBar}>
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'eligibility' && styles.activeTab]}
+          style={[styles.tabItem, activeTab === 'eligibility' && styles.activeTab]}
           onPress={() => setActiveTab('eligibility')}>
-          <IconSymbol name="checkmark.seal" size={20} color={activeTab === 'eligibility' ? '#fff' : Colors[colorScheme ?? 'light'].text} />
-          <ThemedText style={[styles.tabText, activeTab === 'eligibility' && styles.activeTabText]}>Eligibility</ThemedText>
+          <IconSymbol name="checkmark.seal" size={18} color={activeTab === 'eligibility' ? '#fff' : Colors[colorScheme ?? 'light'].text} />
+          <ThemedText style={[styles.tabLabel, activeTab === 'eligibility' && styles.activeTabLabel]}>Eligibility</ThemedText>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'leave' && styles.activeTab]}
+          style={[styles.tabItem, activeTab === 'leave' && styles.activeTab]}
           onPress={() => setActiveTab('leave')}>
-          <IconSymbol name="calendar.badge.plus" size={20} color={activeTab === 'leave' ? '#fff' : Colors[colorScheme ?? 'light'].text} />
-          <ThemedText style={[styles.tabText, activeTab === 'leave' && styles.activeTabText]}>Leave</ThemedText>
+          <IconSymbol name="calendar.badge.plus" size={18} color={activeTab === 'leave' ? '#fff' : Colors[colorScheme ?? 'light'].text} />
+          <ThemedText style={[styles.tabLabel, activeTab === 'leave' && styles.activeTabLabel]}>Leave</ThemedText>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'on-duty' && styles.activeTab]}
+          style={[styles.tabItem, activeTab === 'on-duty' && styles.activeTab]}
           onPress={() => setActiveTab('on-duty')}>
-          <IconSymbol name="checkmark.circle.fill" size={20} color={activeTab === 'on-duty' ? '#fff' : Colors[colorScheme ?? 'light'].text} />
-          <ThemedText style={[styles.tabText, activeTab === 'on-duty' && styles.activeTabText]}>On-Duty</ThemedText>
+          <IconSymbol name="checkmark.circle.fill" size={18} color={activeTab === 'on-duty' ? '#fff' : Colors[colorScheme ?? 'light'].text} />
+          <ThemedText style={[styles.tabLabel, activeTab === 'on-duty' && styles.activeTabLabel]}>On-Duty</ThemedText>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'absence' && styles.activeTab]}
+          style={[styles.tabItem, activeTab === 'absence' && styles.activeTab]}
           onPress={() => setActiveTab('absence')}>
-          <IconSymbol name="doc.text" size={20} color={activeTab === 'absence' ? '#fff' : Colors[colorScheme ?? 'light'].text} />
-          <ThemedText style={[styles.tabText, activeTab === 'absence' && styles.activeTabText]}>Reasons</ThemedText>
+          <IconSymbol name="doc.text" size={18} color={activeTab === 'absence' ? '#fff' : Colors[colorScheme ?? 'light'].text} />
+          <ThemedText style={[styles.tabLabel, activeTab === 'absence' && styles.activeTabLabel]}>Reasons</ThemedText>
         </TouchableOpacity>
-      </ThemedView>
+      </View>
 
       {/* Content */}
       {loading ? (
@@ -492,14 +495,14 @@ export default function StudentInteractionsScreen() {
           <ActivityIndicator size="large" color={Colors[colorScheme ?? 'light'].tint} />
         </View>
       ) : (
-        <View style={styles.content}>
+        <>
           {activeTab === 'leave' && renderLeaveTab()}
           {activeTab === 'absence' && renderAbsenceTab()}
           {activeTab === 'eligibility' && renderEligibilityTab()}
           {activeTab === 'on-duty' && renderOnDutyTab()}
-        </View>
+        </>
       )}
-    </ScrollView>
+    </ThemedView>
   );
 }
 
@@ -507,304 +510,291 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  tabContainer: {
-    flexDirection: 'row',
-    padding: 10,
-    gap: 8,
+  header: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
   },
-  tab: {
+  subtitle: {
+    fontSize: 12,
+    opacity: 0.6,
+    marginTop: 2,
+  },
+  tabBar: {
+    flexDirection: 'row',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    gap: 6,
+  },
+  tabItem: {
     flex: 1,
-    flexDirection: 'column',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    backgroundColor: 'rgba(128, 128, 128, 0.1)',
+    justifyContent: 'center',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    flexDirection: 'row',
     gap: 4,
-    position: 'relative',
   },
   activeTab: {
     backgroundColor: '#007AFF',
   },
-  tabText: {
-    fontSize: 11,
-  },
-  activeTabText: {
-    color: '#fff',
-  },
-  tabBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: '#F44336',
-    borderRadius: 10,
-    minWidth: 18,
-    height: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 4,
-  },
-  tabBadgeText: {
-    color: '#fff',
+  tabLabel: {
     fontSize: 10,
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
-  content: {
-    padding: 16,
+  activeTabLabel: {
+    color: '#fff',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 50,
   },
   sectionTitle: {
-    marginTop: 20,
-    marginBottom: 12,
+    marginHorizontal: 16,
+    marginVertical: 8,
+    fontSize: 14,
+    fontWeight: '600',
   },
   formCard: {
-    padding: 16,
+    marginHorizontal: 16,
+    marginVertical: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 12,
-    marginBottom: 16,
+    backgroundColor: 'rgba(128, 128, 128, 0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  cardTitle: {
-    marginBottom: 16,
-  },
-  formGroup: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
+  inputGroup: {
     marginBottom: 8,
   },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 14,
-  },
-  textArea: {
-    height: 100,
-    textAlignVertical: 'top',
-  },
-  typeButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  typeButton: {
-    flex: 1,
-    padding: 10,
-    borderRadius: 8,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    alignItems: 'center',
-  },
-  typeButtonActive: {
-    backgroundColor: '#007AFF',
-  },
-  typeButtonText: {
-    fontSize: 13,
+  label: {
+    fontSize: 12,
     fontWeight: '600',
+    opacity: 0.8,
+    marginBottom: 4,
   },
-  typeButtonTextActive: {
-    color: '#fff',
+  input: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(128, 128, 128, 0.1)',
+    fontSize: 13,
+    color: '#000',
   },
   submitButton: {
-    padding: 14,
-    borderRadius: 8,
+    marginHorizontal: 16,
+    marginVertical: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
     alignItems: 'center',
-    marginTop: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 3,
   },
   submitButtonText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    fontSize: 14,
   },
   leaveCard: {
-    padding: 14,
-    borderRadius: 10,
-    marginBottom: 10,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    marginTop: 2,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(128, 128, 128, 0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 2,
   },
   leaveHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   leaveDate: {
-    fontSize: 12,
-    opacity: 0.7,
-    marginTop: 4,
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: 'bold',
+    fontSize: 11,
+    opacity: 0.6,
+    marginTop: 2,
   },
   leaveReason: {
-    fontSize: 13,
-    marginTop: 4,
-    opacity: 0.8,
-  },
-  remarksText: {
     fontSize: 12,
-    marginTop: 8,
-    fontStyle: 'italic',
     opacity: 0.7,
+    marginTop: 6,
   },
   reasonCard: {
-    padding: 14,
-    borderRadius: 10,
-    marginBottom: 10,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    marginTop: 2,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(128, 128, 128, 0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 2,
   },
   reasonHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   reasonType: {
-    fontSize: 12,
-    opacity: 0.6,
-    marginBottom: 4,
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 4,
   },
   reasonText: {
-    fontSize: 13,
-    opacity: 0.8,
+    fontSize: 12,
+    opacity: 0.7,
+    marginTop: 4,
   },
   alertCard: {
-    padding: 20,
+    marginHorizontal: 16,
+    marginVertical: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
     borderRadius: 12,
     alignItems: 'center',
-    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 2,
   },
   alertTitle: {
-    marginTop: 12,
-    textAlign: 'center',
-  },
-  alertMessage: {
-    textAlign: 'center',
     marginTop: 8,
     fontSize: 14,
-    opacity: 0.8,
+  },
+  alertMessage: {
+    fontSize: 12,
+    opacity: 0.7,
+    marginTop: 4,
+    textAlign: 'center',
   },
   alertStats: {
     flexDirection: 'row',
-    marginTop: 16,
-    gap: 32,
+    marginTop: 8,
+    gap: 16,
   },
   alertStat: {
     alignItems: 'center',
   },
   alertStatNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '700',
   },
   alertStatLabel: {
-    fontSize: 11,
-    opacity: 0.7,
-    marginTop: 4,
+    fontSize: 10,
+    opacity: 0.6,
+    marginTop: 2,
   },
   eligibilityCard: {
-    padding: 20,
+    marginHorizontal: 16,
+    marginVertical: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
     borderRadius: 12,
+    backgroundColor: 'rgba(128, 128, 128, 0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 2,
   },
   eligibilityHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 10,
   },
   eligibilityStatus: {
-    padding: 16,
-    borderRadius: 8,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginTop: 6,
     alignItems: 'center',
-    marginBottom: 20,
-  },
-  eligibilityStatusText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  eligibilityGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
-    marginBottom: 20,
-  },
-  eligibilityStat: {
-    width: '45%',
-    alignItems: 'center',
-    padding: 12,
-    backgroundColor: 'rgba(0,0,0,0.03)',
-    borderRadius: 8,
-  },
-  eligibilityNumber: {
-    fontSize: 28,
-    fontWeight: 'bold',
-  },
-  eligibilityLabel: {
-    fontSize: 12,
-    opacity: 0.7,
-    marginTop: 4,
-  },
-  eligibilityMessage: {
-    fontSize: 14,
-    textAlign: 'center',
-    opacity: 0.8,
-    marginBottom: 16,
-  },
-  improvementTip: {
-    flexDirection: 'row',
-    gap: 12,
-    padding: 12,
-    backgroundColor: 'rgba(255, 152, 0, 0.1)',
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  improvementText: {
-    flex: 1,
-    fontSize: 13,
-    color: '#FF9800',
-  },
-  emptyState: {
-    alignItems: 'center',
-    padding: 40,
-  },
-  emptyText: {
-    marginTop: 12,
-    opacity: 0.6,
-    fontSize: 14,
   },
   dutyCard: {
-    padding: 14,
-    borderRadius: 10,
-    marginBottom: 10,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    marginTop: 2,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(128, 128, 128, 0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 2,
   },
   dutyHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   dutyDate: {
+    fontSize: 11,
+    opacity: 0.6,
+    marginTop: 2,
+  },
+  institution: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 4,
+  },
+  dutyReason: {
     fontSize: 12,
     opacity: 0.7,
     marginTop: 4,
   },
-  institution: {
-    fontSize: 12,
+  remarksText: {
+    fontSize: 11,
     opacity: 0.6,
-    marginBottom: 4,
-    fontWeight: '500',
+    fontStyle: 'italic',
+    marginTop: 6,
   },
-  dutyReason: {
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  statusText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  emptyState: {
+    marginHorizontal: 16,
+    marginVertical: 20,
+    paddingVertical: 30,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: 'rgba(128, 128, 128, 0.08)',
+  },
+  emptyText: {
     fontSize: 13,
-    marginTop: 4,
-    opacity: 0.8,
+    opacity: 0.6,
+    marginTop: 8,
   },
 });

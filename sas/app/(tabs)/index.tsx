@@ -141,6 +141,29 @@ export default function StudentsScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Gradient Hero Header */}
+      <View style={[styles.heroHeader, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '12' }]}>
+        <View style={styles.heroContent}>
+          <View style={{ flex: 1 }}>
+            <ThemedText type="title" style={styles.heroTitle}>Student Management</ThemedText>
+            <ThemedText style={styles.heroSubtitle}>Track attendance & manage requests</ThemedText>
+          </View>
+          <View style={styles.heroStats}>
+            <View style={styles.heroStat}>
+              <IconSymbol name="person.3.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
+              <ThemedText style={styles.heroStatNumber}>{students.length}</ThemedText>
+              <ThemedText style={styles.heroStatLabel}>Students</ThemedText>
+            </View>
+            <View style={styles.heroStatDivider} />
+            <View style={styles.heroStat}>
+              <IconSymbol name="bell.badge.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
+              <ThemedText style={styles.heroStatNumber}>{requests.length}</ThemedText>
+              <ThemedText style={styles.heroStatLabel}>Requests</ThemedText>
+            </View>
+          </View>
+        </View>
+      </View>
+      
       {/* Segmented Control Style Tabs */}
       <View style={styles.segmentedControl}>
         {[
@@ -635,6 +658,50 @@ const styles = StyleSheet.create({
   iconCircle: { width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(244, 67, 54, 0.1)', justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
   accessTitle: { marginBottom: 12 },
   accessText: { textAlign: 'center', opacity: 0.6, lineHeight: 22 },
+  
+  // Hero Header
+  heroHeader: { 
+    paddingHorizontal: 16, 
+    paddingTop: 16, 
+    paddingBottom: 16,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  heroContent: { 
+    flexDirection: 'row', 
+    alignItems: 'center',
+    gap: 16,
+  },
+  heroTitle: { 
+    marginBottom: 2,
+  },
+  heroSubtitle: { 
+    fontSize: 12, 
+    opacity: 0.6,
+  },
+  heroStats: { 
+    flexDirection: 'row', 
+    alignItems: 'center',
+    gap: 12,
+  },
+  heroStat: { 
+    alignItems: 'center', 
+    gap: 4,
+  },
+  heroStatNumber: { 
+    fontSize: 18, 
+    fontWeight: '700',
+  },
+  heroStatLabel: { 
+    fontSize: 10, 
+    opacity: 0.6,
+    fontWeight: '500',
+  },
+  heroStatDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: 'rgba(128, 128, 128, 0.2)',
+  },
   
   // Segmented Control
   segmentedControl: { flexDirection: 'row', margin: 16, padding: 4, backgroundColor: 'rgba(128, 128, 128, 0.08)', borderRadius: 12, gap: 4 },

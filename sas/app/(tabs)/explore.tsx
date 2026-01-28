@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, ScrollView, TouchableOpacity, View, Alert } from 'react-native';
+import { StyleSheet, FlatList, TouchableOpacity, View, Alert, RefreshControl } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAttendance } from '@/context/AttendanceContext';
@@ -12,9 +12,16 @@ export default function MarkAttendanceScreen() {
   const { students, markAttendance, getTodayAttendance, error } = useAttendance();
   const [selectedStatus, setSelectedStatus] = useState<Record<string, 'present' | 'absent' | 'late'>>({});
   const [marking, setMarking] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   
   const todayAttendance = getTodayAttendance();
   const markedStudentIds = new Set(todayAttendance.map(record => record.studentId));
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    // Refresh attendance data
+    setTimeout(() => setRefreshing(false), 500);
+  };
 
   const handleMarkAttendance = async (studentId: string, status: 'present' | 'absent' | 'late') => {
     try {
@@ -80,221 +87,348 @@ export default function MarkAttendanceScreen() {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <ThemedView style={styles.header}>
-        <ThemedText type="title">Mark Attendance</ThemedText>
-        <ThemedText style={styles.date}>
-          {new Date().toLocaleDateString('en-US', { 
-            weekday: 'long', 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
-          })}
-        </ThemedText>
-      </ThemedView>
+    <ThemedView style={styles.container}>
+      {/* Progress Header - Creative Design */}
+      <View style={[styles.progressHeader, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '12' }]}>
+        <View style={styles.progressHeaderTop}>
+          <View>
+            <ThemedText type="title" style={styles.progressTitle}>Mark Attendance</ThemedText>
+            <ThemedText style={styles.progressDate}>
+              {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+            </ThemedText>
+          </View>
+          <TouchableOpacity
+            style={[styles.markAllButton, { backgroundColor: Colors[colorScheme ?? 'light'].tint }]}
+            onPress={markAllPresent}
+            disabled={marking}>
+            <ThemedText style={styles.markAllButtonText}>
+              {marking ? '...' : 'Mark All'}
+            </ThemedText>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.progressBarContainer}>
+          <View style={styles.progressBarTrack}>
+            <View 
+              style={[
+                styles.progressBarFill,
+                { 
+                  width: `${stats.total > 0 ? (stats.present / stats.total) * 100 : 0}%`,
+                  backgroundColor: '#4CAF50'
+                }
+              ]} 
+            />
+          </View>
+          <ThemedText style={styles.progressBarLabel}>
+            {stats.present}/{stats.total} marked present
+          </ThemedText>
+        </View>
+      </View>
+
+      {/* Stats Row */}
+      <View style={styles.statsRow}>
+        <View style={styles.statBadge}>
+          <ThemedText style={styles.statNumber}>{stats.total}</ThemedText>
+          <ThemedText style={styles.statLabel}>Total</ThemedText>
+        </View>
+        <View style={[styles.statBadge, { backgroundColor: 'rgba(76, 175, 80, 0.15)' }]}>
+          <ThemedText style={[styles.statNumber, { color: '#4CAF50' }]}>{stats.present}</ThemedText>
+          <ThemedText style={styles.statLabel}>Present</ThemedText>
+        </View>
+        <View style={[styles.statBadge, { backgroundColor: 'rgba(244, 67, 54, 0.15)' }]}>
+          <ThemedText style={[styles.statNumber, { color: '#F44336' }]}>{stats.absent}</ThemedText>
+          <ThemedText style={styles.statLabel}>Absent</ThemedText>
+        </View>
+        <View style={[styles.statBadge, { backgroundColor: 'rgba(255, 152, 0, 0.15)' }]}>
+          <ThemedText style={[styles.statNumber, { color: '#FF9800' }]}>{stats.late}</ThemedText>
+          <ThemedText style={styles.statLabel}>Late</ThemedText>
+        </View>
+      </View>
 
       {error && (
         <ThemedView style={styles.errorBanner}>
+          <IconSymbol name="exclamationmark.circle.fill" size={18} color="#ff4444" />
           <ThemedText style={styles.errorText}>{error}</ThemedText>
         </ThemedView>
       )}
 
-      <ThemedView style={styles.statsContainer}>
-        <View style={styles.statCard}>
-          <ThemedText style={styles.statNumber}>{stats.total}</ThemedText>
-          <ThemedText style={styles.statLabel}>Total</ThemedText>
-        </View>
-        <View style={[styles.statCard, { backgroundColor: 'rgba(76, 175, 80, 0.2)' }]}>
-          <ThemedText style={[styles.statNumber, { color: '#4CAF50' }]}>{stats.present}</ThemedText>
-          <ThemedText style={styles.statLabel}>Present</ThemedText>
-        </View>
-        <View style={[styles.statCard, { backgroundColor: 'rgba(244, 67, 54, 0.2)' }]}>
-          <ThemedText style={[styles.statNumber, { color: '#F44336' }]}>{stats.absent}</ThemedText>
-          <ThemedText style={styles.statLabel}>Absent</ThemedText>
-        </View>
-        <View style={[styles.statCard, { backgroundColor: 'rgba(255, 152, 0, 0.2)' }]}>
-          <ThemedText style={[styles.statNumber, { color: '#FF9800' }]}>{stats.late}</ThemedText>
-          <ThemedText style={styles.statLabel}>Late</ThemedText>
-        </View>
-      </ThemedView>
-
-      <TouchableOpacity
-        style={[styles.markAllButton, { backgroundColor: Colors[colorScheme ?? 'light'].tint }]}
-        onPress={markAllPresent}
-        disabled={marking}>
-        <ThemedText style={styles.markAllText}>
-          {marking ? 'Marking...' : 'Mark All Present'}
-        </ThemedText>
-      </TouchableOpacity>
-
-      <ThemedView style={styles.studentList}>
-        {students.map((student) => {
+      {/* Student List */}
+      <FlatList
+        data={students}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh}
+            tintColor={Colors[colorScheme ?? 'light'].tint}
+          />
+        }
+        renderItem={({ item: student }) => {
           const currentStatus = getStatusForStudent(student.id);
           const isMarked = currentStatus !== null;
 
           return (
-            <ThemedView key={student.id} style={styles.studentCard}>
+            <ThemedView style={[styles.studentCard, { marginHorizontal: 16 }]}>
               <View style={styles.studentInfo}>
                 <View style={styles.studentHeader}>
-                  <ThemedText type="defaultSemiBold" style={styles.studentName}>
-                    {student.name}
-                  </ThemedText>
+                  <View style={{ flex: 1 }}>
+                    <ThemedText type="defaultSemiBold" style={styles.studentName}>
+                      {student.name}
+                    </ThemedText>
+                    <ThemedText style={styles.studentDetails}>
+                      {student.rollNumber} • {student.class}
+                    </ThemedText>
+                  </View>
                   {isMarked && (
-                    <IconSymbol name="checkmark.circle.fill" size={20} color={getStatusColor(currentStatus)} />
+                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(currentStatus) }]}>
+                      <ThemedText style={styles.statusBadgeText}>
+                        {currentStatus?.charAt(0).toUpperCase()}{currentStatus?.slice(1)}
+                      </ThemedText>
+                    </View>
                   )}
                 </View>
-                <ThemedText style={styles.studentDetails}>
-                  {student.rollNumber} - {student.class}
-                </ThemedText>
               </View>
 
               <View style={styles.statusButtons}>
                 <TouchableOpacity
                   style={[
                     styles.statusButton,
+                    currentStatus === 'present' && styles.statusButtonActive,
                     currentStatus === 'present' && { backgroundColor: '#4CAF50' }
                   ]}
                   onPress={() => handleMarkAttendance(student.id, 'present')}>
                   <IconSymbol 
-                    name="checkmark.circle" 
-                    size={24} 
+                    name="checkmark" 
+                    size={20} 
                     color={currentStatus === 'present' ? '#fff' : '#4CAF50'} 
                   />
+                  <ThemedText style={[styles.statusButtonLabel, { color: currentStatus === 'present' ? '#fff' : '#4CAF50' }]}>
+                    Present
+                  </ThemedText>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={[
                     styles.statusButton,
+                    currentStatus === 'late' && styles.statusButtonActive,
                     currentStatus === 'late' && { backgroundColor: '#FF9800' }
                   ]}
                   onPress={() => handleMarkAttendance(student.id, 'late')}>
                   <IconSymbol 
                     name="clock" 
-                    size={24} 
+                    size={20} 
                     color={currentStatus === 'late' ? '#fff' : '#FF9800'} 
                   />
+                  <ThemedText style={[styles.statusButtonLabel, { color: currentStatus === 'late' ? '#fff' : '#FF9800' }]}>
+                    Late
+                  </ThemedText>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={[
                     styles.statusButton,
+                    currentStatus === 'absent' && styles.statusButtonActive,
                     currentStatus === 'absent' && { backgroundColor: '#F44336' }
                   ]}
                   onPress={() => handleMarkAttendance(student.id, 'absent')}>
                   <IconSymbol 
-                    name="xmark.circle" 
-                    size={24} 
+                    name="xmark" 
+                    size={20} 
                     color={currentStatus === 'absent' ? '#fff' : '#F44336'} 
                   />
+                  <ThemedText style={[styles.statusButtonLabel, { color: currentStatus === 'absent' ? '#fff' : '#F44336' }]}>
+                    Absent
+                  </ThemedText>
                 </TouchableOpacity>
               </View>
             </ThemedView>
           );
-        })}
-      </ThemedView>
-    </ScrollView>
+        }}
+      />
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
+  },
+  progressHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 16,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  progressHeaderTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  progressTitle: {
+    marginBottom: 4,
+  },
+  progressDate: {
+    fontSize: 13,
+    opacity: 0.6,
+  },
+  progressBarContainer: {
+    gap: 8,
+  },
+  progressBarTrack: {
+    height: 6,
+    backgroundColor: 'rgba(128, 128, 128, 0.2)',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  progressBarLabel: {
+    fontSize: 12,
+    opacity: 0.7,
+    fontWeight: '500',
   },
   header: {
-    marginBottom: 20,
-    paddingTop: 50,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   date: {
-    fontSize: 14,
+    fontSize: 13,
     opacity: 0.7,
     marginTop: 4,
   },
-  statsContainer: {
+  statsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     gap: 8,
   },
-  statCard: {
+  statBadge: {
     flex: 1,
-    padding: 14,
-    borderRadius: 12,
-    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 10,
     backgroundColor: 'rgba(128, 128, 128, 0.1)',
+    alignItems: 'center',
   },
   statNumber: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '700',
   },
   statLabel: {
-    fontSize: 11,
+    fontSize: 10,
     opacity: 0.7,
-    marginTop: 4,
+    marginTop: 2,
   },
-  markAllButton: {
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  markAllText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 16,
-  },
-  studentList: {
-    marginBottom: 20,
+  listContent: {
+    paddingTop: 8,
+    paddingBottom: 20,
   },
   studentCard: {
-    padding: 16,
+    marginBottom: 10,
+    marginTop: 2,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
     borderRadius: 12,
-    marginBottom: 12,
-    backgroundColor: 'rgba(128, 128, 128, 0.1)',
+    backgroundColor: 'rgba(128, 128, 128, 0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 2,
   },
   studentInfo: {
-    marginBottom: 12,
+    marginBottom: 10,
   },
   studentHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
   },
   studentName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
+    marginBottom: 2,
   },
   studentDetails: {
-    fontSize: 13,
-    opacity: 0.7,
+    fontSize: 12,
+    opacity: 0.6,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: '#4CAF50',
+  },
+  statusBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  markAllButton: {
+    marginHorizontal: 16,
+    marginVertical: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  markAllButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
   },
   statusButtons: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    gap: 8,
+    gap: 6,
   },
   statusButton: {
     flex: 1,
-    height: 50,
-    borderRadius: 12,
+    height: 42,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(128, 128, 128, 0.1)',
+    flexDirection: 'row',
+    gap: 4,
+  },
+  statusButtonActive: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  statusButtonLabel: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   errorBanner: {
-    backgroundColor: '#ff444420',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 12,
+    marginHorizontal: 16,
+    marginVertical: 8,
+    backgroundColor: 'rgba(255, 68, 68, 0.1)',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   errorText: {
     color: '#ff4444',
-    fontSize: 14,
+    fontSize: 13,
+    flex: 1,
   },
 });

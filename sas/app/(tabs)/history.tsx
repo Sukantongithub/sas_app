@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput } from 'react-native';
+import { StyleSheet, FlatList, View, TouchableOpacity, TextInput } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAttendance } from '@/context/AttendanceContext';
@@ -125,470 +125,405 @@ export default function HistoryScreen() {
   }, [attendanceRecords]);
 
   return (
-    <ScrollView style={styles.container}>
-      <ThemedView style={styles.header}>
-        <ThemedText type="title">Attendance History</ThemedText>
-      </ThemedView>
+    <ThemedView style={styles.container}>
+      {/* Compact Filter Header */}
+      <View style={[styles.filterHeader, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '10' }]}>
+        <View style={styles.filterHeaderTop}>
+          <View>
+            <ThemedText type="title" style={styles.filterHeaderTitle}>Attendance History</ThemedText>
+            <ThemedText style={styles.filterHeaderSubtitle}>View records & analytics</ThemedText>
+          </View>
+          <IconSymbol name="chart.xyaxis.line" size={24} color={Colors[colorScheme ?? 'light'].tint} />
+        </View>
+      </View>
 
-      {/* Show message for students to use the dedicated attendance screen */}
       {isStudent ? (
-        <ThemedView style={styles.studentMessageContainer}>
+        /* Student Message */
+        <View style={styles.emptyStateContainer}>
           <IconSymbol name="info.circle.fill" size={48} color={Colors[colorScheme ?? 'light'].tint} />
-          <ThemedText type="subtitle" style={styles.studentMessageTitle}>
+          <ThemedText type="defaultSemiBold" style={styles.studentMessageTitle}>
             View Your Attendance
           </ThemedText>
           <ThemedText style={styles.studentMessageText}>
-            Students should use the "My Attendance" tab to view their daily attendance, subject-wise stats, monthly percentage, and time records.
+            Use the "My Attendance" tab to view your daily attendance, subject-wise stats, monthly percentage, and time records.
           </ThemedText>
-          <ThemedText style={styles.studentMessageHint}>
-            Tap the "My Attendance" icon in the bottom navigation to access your complete attendance dashboard.
-          </ThemedText>
-        </ThemedView>
+        </View>
       ) : (
-        <>
-          {/* Overall Statistics */}
-          <ThemedView style={styles.overallStatsCard}>
-            <ThemedText type="subtitle" style={styles.cardTitle}>Overall Statistics</ThemedText>
-            <View style={styles.overallStatsGrid}>
-              <View style={styles.overallStatItem}>
-                <IconSymbol name="chart.bar.fill" size={24} color={Colors[colorScheme ?? 'light'].tint} />
-                <ThemedText style={styles.overallStatNumber}>{overallStats.percentage.toFixed(1)}%</ThemedText>
-                <ThemedText style={styles.overallStatLabel}>Avg Attendance</ThemedText>
-              </View>
-              <View style={styles.overallStatItem}>
-                <IconSymbol name="checkmark.circle.fill" size={24} color="#4CAF50" />
-                <ThemedText style={styles.overallStatNumber}>{overallStats.present}</ThemedText>
-                <ThemedText style={styles.overallStatLabel}>Present</ThemedText>
-              </View>
-              <View style={styles.overallStatItem}>
-                <IconSymbol name="xmark.circle.fill" size={24} color="#F44336" />
-                <ThemedText style={styles.overallStatNumber}>{overallStats.absent}</ThemedText>
-                <ThemedText style={styles.overallStatLabel}>Absent</ThemedText>
-              </View>
-            </View>
-          </ThemedView>
-
-          {/* Search and Filters */}
-          <ThemedView style={styles.controlsSection}>
-        <View style={styles.searchContainer}>
-          <IconSymbol name="magnifyingglass" size={16} color="#999" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search students..."
-            placeholderTextColor="#999"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <IconSymbol name="xmark.circle.fill" size={16} color="#999" />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <View style={styles.filterRow}>
-          <View style={styles.filterGroup}>
-            <ThemedText style={styles.filterLabel}>Filter:</ThemedText>
-            <TouchableOpacity
-              style={[styles.filterButton, filterType === 'all' && styles.filterButtonActive]}
-              onPress={() => setFilterType('all')}>
-              <ThemedText style={[styles.filterButtonText, filterType === 'all' && styles.filterButtonTextActive]}>
-                All
-              </ThemedText>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.filterButton, filterType === 'low' && styles.filterButtonActive]}
-              onPress={() => setFilterType('low')}>
-              <ThemedText style={[styles.filterButtonText, filterType === 'low' && styles.filterButtonTextActive]}>
-                Low (&lt;75%)
-              </ThemedText>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.filterButton, filterType === 'high' && styles.filterButtonActive]}
-              onPress={() => setFilterType('high')}>
-              <ThemedText style={[styles.filterButtonText, filterType === 'high' && styles.filterButtonTextActive]}>
-                High (≥75%)
-              </ThemedText>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.filterGroup}>
-            <ThemedText style={styles.filterLabel}>Sort:</ThemedText>
-            <TouchableOpacity
-              style={[styles.filterButton, sortType === 'name' && styles.filterButtonActive]}
-              onPress={() => setSortType('name')}>
-              <ThemedText style={[styles.filterButtonText, sortType === 'name' && styles.filterButtonTextActive]}>
-                Name
-              </ThemedText>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.filterButton, sortType === 'percentage' && styles.filterButtonActive]}
-              onPress={() => setSortType('percentage')}>
-              <ThemedText style={[styles.filterButtonText, sortType === 'percentage' && styles.filterButtonTextActive]}>
-                %
-              </ThemedText>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </ThemedView>
-
-      {/* Student Stats Cards */}
-      <ThemedView style={styles.statsSection}>
-        <ThemedText type="subtitle" style={styles.sectionTitle}>
-          Student Statistics ({filteredAndSortedStudents.length})
-        </ThemedText>
-        
-        {filteredAndSortedStudents.map(student => {
-          const stats = calculateStats(student.id);
-          const isSelected = selectedStudentId === student.id;
-
-          return (
-            <TouchableOpacity
-              key={student.id}
-              onPress={() => setSelectedStudentId(isSelected ? null : student.id)}>
-              <ThemedView style={styles.statCard}>
-                <View style={styles.statHeader}>
-                  <View>
-                    <ThemedText type="defaultSemiBold" style={styles.studentName}>
-                      {student.name}
-                    </ThemedText>
-                    <ThemedText style={styles.rollNumber}>
-                      {student.rollNumber}
-                    </ThemedText>
+        /* Teacher/Admin View */
+        <FlatList
+          data={[1]} // Dummy data to render content once
+          keyExtractor={() => 'main'}
+          contentContainerStyle={styles.listContent}
+          renderItem={() => (
+            <>
+              {/* Overall Statistics */}
+              <ThemedView style={[styles.statsCard, { marginHorizontal: 16 }]}>
+                <ThemedText type="defaultSemiBold" style={styles.cardTitle}>Overall Stats</ThemedText>
+                <View style={styles.statsGrid}>
+                  <View style={styles.statItem}>
+                    <IconSymbol name="chart.bar.fill" size={20} color={Colors[colorScheme ?? 'light'].tint} />
+                    <ThemedText style={styles.statValue}>{overallStats.percentage.toFixed(0)}%</ThemedText>
+                    <ThemedText style={styles.statLabel}>Avg</ThemedText>
                   </View>
-                  <View style={styles.percentageContainer}>
-                    <ThemedText style={[
-                      styles.percentage,
-                      { color: stats.percentage >= 75 ? '#4CAF50' : '#F44336' }
-                    ]}>
-                      {stats.percentage.toFixed(1)}%
-                    </ThemedText>
-                    <IconSymbol 
-                      name={isSelected ? 'chevron.up' : 'chevron.down'} 
-                      size={16} 
-                      color={Colors[colorScheme ?? 'light'].text} 
-                    />
+                  <View style={styles.statItem}>
+                    <IconSymbol name="checkmark.circle.fill" size={20} color="#4CAF50" />
+                    <ThemedText style={styles.statValue}>{overallStats.present}</ThemedText>
+                    <ThemedText style={styles.statLabel}>Present</ThemedText>
+                  </View>
+                  <View style={styles.statItem}>
+                    <IconSymbol name="xmark.circle.fill" size={20} color="#F44336" />
+                    <ThemedText style={styles.statValue}>{overallStats.absent}</ThemedText>
+                    <ThemedText style={styles.statLabel}>Absent</ThemedText>
                   </View>
                 </View>
-
-                {isSelected && (
-                  <View style={styles.detailedStats}>
-                    <View style={styles.statRow}>
-                      <View style={styles.statItem}>
-                        <IconSymbol name="book.fill" size={16} color={Colors[colorScheme ?? 'light'].tint} />
-                        <ThemedText style={styles.statText}>
-                          {stats.totalClasses} Classes
-                        </ThemedText>
-                      </View>
-                      <View style={styles.statItem}>
-                        <IconSymbol name="checkmark.circle.fill" size={16} color="#4CAF50" />
-                        <ThemedText style={styles.statText}>
-                          {stats.present} Present
-                        </ThemedText>
-                      </View>
-                    </View>
-                    <View style={styles.statRow}>
-                      <View style={styles.statItem}>
-                        <IconSymbol name="xmark.circle.fill" size={16} color="#F44336" />
-                        <ThemedText style={styles.statText}>
-                          {stats.absent} Absent
-                        </ThemedText>
-                      </View>
-                      <View style={styles.statItem}>
-                        <IconSymbol name="clock.fill" size={16} color="#FF9800" />
-                        <ThemedText style={styles.statText}>
-                          {stats.late} Late
-                        </ThemedText>
-                      </View>
-                    </View>
-                  </View>
-                )}
               </ThemedView>
-            </TouchableOpacity>
-          );
-        })}
-      </ThemedView>
 
-      {/* Daily Attendance Records */}
-      <ThemedView style={styles.recordsSection}>
-        <ThemedText type="subtitle" style={styles.sectionTitle}>
-          Daily Records
-        </ThemedText>
+              {/* Search and Filters */}
+              <View style={[styles.controlsSection, { marginHorizontal: 16 }]}>
+                <View style={styles.searchContainer}>
+                  <IconSymbol name="magnifyingglass" size={16} color="#999" />
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search..."
+                    placeholderTextColor="#999"
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                  />
+                  {searchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => setSearchQuery('')}>
+                      <IconSymbol name="xmark.circle.fill" size={16} color="#999" />
+                    </TouchableOpacity>
+                  )}
+                </View>
 
-        {attendanceRecords.length === 0 ? (
-          <ThemedView style={styles.emptyState}>
-            <IconSymbol name="calendar.badge.exclamationmark" size={48} color="#999" />
-            <ThemedText style={styles.emptyText}>
-              No attendance records yet
-            </ThemedText>
-          </ThemedView>
-        ) : (
-          groupRecordsByDate().map(([date, records]) => (
-            <ThemedView key={date} style={styles.dateGroup}>
-              <ThemedText type="defaultSemiBold" style={styles.dateHeader}>
-                {formatDate(date)}
-              </ThemedText>
-              
-              {records.map(record => {
-                const student = students.find(s => s.id === record.studentId);
-                if (!student) return null;
+                <View style={styles.filterRow}>
+                  <TouchableOpacity
+                    style={[styles.filterBtn, filterType === 'all' && styles.filterBtnActive]}
+                    onPress={() => setFilterType('all')}>
+                    <ThemedText style={[styles.filterBtnText, filterType === 'all' && styles.filterBtnTextActive]}>All</ThemedText>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.filterBtn, filterType === 'low' && styles.filterBtnActive]}
+                    onPress={() => setFilterType('low')}>
+                    <ThemedText style={[styles.filterBtnText, filterType === 'low' && styles.filterBtnTextActive]}>Low</ThemedText>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.filterBtn, filterType === 'high' && styles.filterBtnActive]}
+                    onPress={() => setFilterType('high')}>
+                    <ThemedText style={[styles.filterBtnText, filterType === 'high' && styles.filterBtnTextActive]}>High</ThemedText>
+                  </TouchableOpacity>
+                </View>
 
-                const statusInfo = getStatusIcon(record.status);
-                
-                return (
-                  <View key={record.id} style={styles.recordCard}>
-                    <View style={styles.recordInfo}>
-                      <ThemedText style={styles.recordName}>
+                <View style={styles.sortRow}>
+                  <TouchableOpacity
+                    style={[styles.sortBtn, sortType === 'name' && styles.sortBtnActive]}
+                    onPress={() => setSortType('name')}>
+                    <ThemedText style={[styles.sortBtnText, sortType === 'name' && styles.sortBtnTextActive]}>Name</ThemedText>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.sortBtn, sortType === 'percentage' && styles.sortBtnActive]}
+                    onPress={() => setSortType('percentage')}>
+                    <ThemedText style={[styles.sortBtnText, sortType === 'percentage' && styles.sortBtnTextActive]}>%</ThemedText>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </>
+          )}
+        />
+      )}
+
+      {!isStudent && (
+        <FlatList
+          data={filteredAndSortedStudents}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.studentListContent}
+          renderItem={({ item: student }) => {
+            const stats = calculateStats(student.id);
+            const isSelected = selectedStudentId === student.id;
+
+            return (
+              <TouchableOpacity
+                onPress={() => setSelectedStudentId(isSelected ? null : student.id)}>
+                <ThemedView style={[styles.studentCard, { marginHorizontal: 16 }]}>
+                  <View style={styles.studentCardHeader}>
+                    <View style={{ flex: 1 }}>
+                      <ThemedText type="defaultSemiBold" style={styles.studentName}>
                         {student.name}
                       </ThemedText>
-                      <ThemedText style={styles.recordRoll}>
+                      <ThemedText style={styles.rollNumber}>
                         {student.rollNumber}
                       </ThemedText>
                     </View>
-                    <View style={styles.recordStatus}>
-                      <IconSymbol 
-                        name={statusInfo.name} 
-                        size={20} 
-                        color={statusInfo.color} 
-                      />
-                      <ThemedText 
-                        style={[
-                          styles.statusText,
-                          { color: statusInfo.color }
-                        ]}>
-                        {record.status.charAt(0).toUpperCase() + record.status.slice(1)}
+                    <View style={styles.percentageContainer}>
+                      <ThemedText style={[
+                        styles.percentage,
+                        { color: stats.percentage >= 75 ? '#4CAF50' : '#F44336' }
+                      ]}>
+                        {stats.percentage.toFixed(0)}%
                       </ThemedText>
+                      <IconSymbol 
+                        name={isSelected ? 'chevron.up' : 'chevron.down'} 
+                        size={16} 
+                        color={Colors[colorScheme ?? 'light'].text} 
+                      />
                     </View>
                   </View>
-                );
-              })}
-            </ThemedView>
-          ))
-        )}
-      </ThemedView>
-        </>
+
+                  {isSelected && (
+                    <View style={styles.detailedStats}>
+                      <View style={styles.detailRow}>
+                        <View style={[styles.detailItem, { marginRight: 8 }]}>
+                          <IconSymbol name="book.fill" size={14} color={Colors[colorScheme ?? 'light'].tint} />
+                          <ThemedText style={styles.detailText}>{stats.totalClasses}  Classes</ThemedText>
+                        </View>
+                        <View style={styles.detailItem}>
+                          <IconSymbol name="checkmark.circle.fill" size={14} color="#4CAF50" />
+                          <ThemedText style={styles.detailText}>{stats.present} P</ThemedText>
+                        </View>
+                      </View>
+                      <View style={styles.detailRow}>
+                        <View style={[styles.detailItem, { marginRight: 8 }]}>
+                          <IconSymbol name="xmark.circle.fill" size={14} color="#F44336" />
+                          <ThemedText style={styles.detailText}>{stats.absent} A</ThemedText>
+                        </View>
+                        <View style={styles.detailItem}>
+                          <IconSymbol name="clock.fill" size={14} color="#FF9800" />
+                          <ThemedText style={styles.detailText}>{stats.late} L</ThemedText>
+                        </View>
+                      </View>
+                    </View>
+                  )}
+                </ThemedView>
+              </TouchableOpacity>
+            );
+          }}
+          ListHeaderComponent={<View style={{ height: 8 }} />}
+          ListEmptyComponent={
+            <View style={styles.emptyStateContainer}>
+              <IconSymbol name="person.slash" size={40} color={Colors[colorScheme ?? 'light'].text} />
+              <ThemedText style={styles.emptyText}>No students found</ThemedText>
+            </View>
+          }
+          ListFooterComponent={<View style={{ height: 20 }} />}
+        />
       )}
-    </ScrollView>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
   },
-  header: {
-    marginBottom: 20,
-    paddingTop: 50,
+  filterHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 14,
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 18,
   },
-  studentMessageContainer: {
-    padding: 32,
-    borderRadius: 16,
+  filterHeaderTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginHorizontal: 8,
-    marginTop: 20,
   },
-  studentMessageTitle: {
-    marginTop: 16,
-    marginBottom: 8,
-    textAlign: 'center',
+  filterHeaderTitle: {
+    marginBottom: 2,
   },
-  studentMessageText: {
-    textAlign: 'center',
-    fontSize: 14,
-    opacity: 0.8,
-    lineHeight: 22,
-    marginBottom: 12,
-  },
-  studentMessageHint: {
-    textAlign: 'center',
+  filterHeaderSubtitle: {
     fontSize: 12,
     opacity: 0.6,
-    fontStyle: 'italic',
   },
-  overallStatsCard: {
-    padding: 16,
+  header: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 10,
+  },
+  listContent: {
+    paddingBottom: 8,
+  },
+  studentListContent: {
+    paddingTop: 8,
+    paddingBottom: 20,
+  },
+  statsCard: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 12,
-    marginBottom: 16,
+    marginBottom: 12,
+    marginTop: 8,
     backgroundColor: 'rgba(128, 128, 128, 0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 2,
   },
   cardTitle: {
-    marginBottom: 16,
+    marginBottom: 10,
+    fontSize: 14,
+    fontWeight: '600',
   },
-  overallStatsGrid: {
+  statsGrid: {
     flexDirection: 'row',
     justifyContent: 'space-around',
   },
-  overallStatItem: {
+  statItem: {
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
   },
-  overallStatNumber: {
-    fontSize: 22,
-    fontWeight: 'bold',
+  statValue: {
+    fontSize: 18,
+    fontWeight: '700',
   },
-  overallStatLabel: {
-    fontSize: 11,
-    opacity: 0.7,
+  statLabel: {
+    fontSize: 10,
+    opacity: 0.6,
   },
   controlsSection: {
-    marginBottom: 16,
+    marginBottom: 12,
+    marginTop: 8,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(128, 128, 128, 0.1)',
     borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 10,
     gap: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.light.text,
   },
   filterRow: {
-    gap: 12,
-  },
-  filterGroup: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 8,
   },
-  filterLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    opacity: 0.7,
-  },
-  filterButton: {
-    paddingHorizontal: 12,
+  filterBtn: {
+    paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: 8,
     backgroundColor: 'rgba(128, 128, 128, 0.1)',
   },
-  filterButtonActive: {
-    backgroundColor: Colors.light.tint,
+  filterBtnActive: {
+    backgroundColor: '#007AFF',
   },
-  filterButtonText: {
-    fontSize: 12,
+  filterBtnText: {
+    fontSize: 11,
     fontWeight: '500',
   },
-  filterButtonTextActive: {
+  filterBtnTextActive: {
     color: '#fff',
     fontWeight: '600',
   },
-  statsSection: {
-    marginBottom: 24,
+  sortRow: {
+    flexDirection: 'row',
+    gap: 8,
   },
-  sectionTitle: {
-    marginBottom: 12,
-  },
-  statCard: {
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
+  sortBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
     backgroundColor: 'rgba(128, 128, 128, 0.1)',
   },
-  statHeader: {
+  sortBtnActive: {
+    backgroundColor: '#007AFF',
+  },
+  sortBtnText: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  sortBtnTextActive: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  studentCard: {
+    marginBottom: 8,
+    marginTop: 2,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(128, 128, 128, 0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  studentCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   studentName: {
-    fontSize: 16,
+    fontSize: 14,
+    fontWeight: '600',
   },
   rollNumber: {
-    fontSize: 13,
-    opacity: 0.7,
+    fontSize: 12,
+    opacity: 0.6,
     marginTop: 2,
   },
   percentageContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   percentage: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: '700',
   },
   detailedStats: {
-    marginTop: 16,
-    paddingTop: 16,
+    marginTop: 8,
+    paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(128, 128, 128, 0.2)',
+    borderTopColor: 'rgba(128, 128, 128, 0.15)',
   },
-  statRow: {
+  detailRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-    gap: 8,
+    marginBottom: 6,
+    gap: 6,
   },
-  statItem: {
+  detailItem: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    flex: 1,
-    padding: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
     borderRadius: 8,
-    backgroundColor: 'rgba(128, 128, 128, 0.08)',
+    backgroundColor: 'rgba(128, 128, 128, 0.06)',
+    gap: 4,
   },
-  statText: {
-    fontSize: 13,
+  detailText: {
+    fontSize: 11,
     fontWeight: '500',
   },
-  recordsSection: {
-    marginBottom: 20,
-  },
-  emptyState: {
+  emptyStateContainer: {
     alignItems: 'center',
-    padding: 40,
+    justifyContent: 'center',
+    flex: 1,
+    paddingVertical: 60,
+    gap: 12,
   },
   emptyText: {
+    opacity: 0.6,
+    fontSize: 14,
+  },
+  studentMessageTitle: {
+    fontSize: 16,
+    fontWeight: '600',
     marginTop: 12,
-    opacity: 0.6,
-    fontSize: 14,
   },
-  dateGroup: {
-    marginBottom: 20,
-  },
-  dateHeader: {
-    fontSize: 15,
-    marginBottom: 12,
-    opacity: 0.8,
-    fontWeight: '600',
-    paddingLeft: 4,
-  },
-  recordCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 14,
-    borderRadius: 10,
-    marginBottom: 8,
-    backgroundColor: 'rgba(128, 128, 128, 0.1)',
-  },
-  recordInfo: {
-    flex: 1,
-  },
-  recordName: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  recordRoll: {
-    fontSize: 12,
-    opacity: 0.6,
-    marginTop: 4,
-  },
-  recordStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  statusText: {
+  studentMessageText: {
+    textAlign: 'center',
     fontSize: 13,
-    fontWeight: '700',
+    opacity: 0.7,
+    lineHeight: 20,
+    marginTop: 8,
   },
 });

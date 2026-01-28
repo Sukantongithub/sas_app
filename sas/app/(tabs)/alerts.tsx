@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, ActivityIndicator, RefreshControl, FlatList, TextInput } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, ActivityIndicator, RefreshControl, FlatList, TextInput } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -91,19 +91,24 @@ export default function MessagesScreen() {
   return (
     <ThemedView style={styles.container}>
       {view === 'conversations' ? (
-        <ScrollView
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        >
-          <ThemedView style={styles.header}>
-            <View>
-              <ThemedText type="title">Messages</ThemedText>
+        <>
+          {/* Badge-Based Creative Header */}
+          <View style={[styles.badgeHeader, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '12' }]}>
+            <View style={styles.badgeHeaderContent}>
+              <View style={styles.badgeIconContainer}>
+                <IconSymbol name="bubble.left.and.bubble.right.fill" size={24} color={Colors[colorScheme ?? 'light'].tint} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <ThemedText type="title" style={styles.badgeHeaderTitle}>Messages</ThemedText>
+                <ThemedText style={styles.badgeHeaderSubtitle}>{conversations.length} {conversations.length === 1 ? 'conversation' : 'conversations'}</ThemedText>
+              </View>
               {unreadCount > 0 && (
-                <ThemedText style={styles.unreadBadge}>
-                  {unreadCount} unread
-                </ThemedText>
+                <View style={styles.unreadBadgeCircle}>
+                  <ThemedText style={styles.unreadBadgeText}>{unreadCount}</ThemedText>
+                </View>
               )}
             </View>
-          </ThemedView>
+          </View>
 
           {loading ? (
             <View style={styles.loadingContainer}>
@@ -111,27 +116,29 @@ export default function MessagesScreen() {
             </View>
           ) : conversations.length === 0 ? (
             <View style={styles.emptyState}>
-              <IconSymbol name="envelope.open" size={48} color="#999" />
-              <ThemedText style={styles.emptyText}>
-                No messages yet
-              </ThemedText>
+              <IconSymbol name="envelope.open" size={48} color={Colors[colorScheme ?? 'light'].text} />
+              <ThemedText style={styles.emptyText}>No messages yet</ThemedText>
             </View>
           ) : (
-            <View style={styles.conversationsList}>
-              {conversations.map((conversation) => (
+            <FlatList
+              data={conversations}
+              keyExtractor={(item) => item._id}
+              contentContainerStyle={styles.listContent}
+              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+              renderItem={({ item: conversation }) => (
                 <TouchableOpacity
-                  key={conversation._id}
                   onPress={() => handleSelectConversation(conversation)}
                   activeOpacity={0.7}>
-                  <ThemedView
-                    style={[
-                      styles.conversationCard,
-                      conversation.unreadCount > 0 && styles.conversationUnread,
-                    ]}>
+                  <ThemedView style={[styles.conversationCard, { marginHorizontal: 16 }, conversation.unreadCount > 0 && styles.conversationUnread]}>
                     <View style={styles.conversationHeader}>
-                      <ThemedText type="defaultSemiBold" style={styles.conversationTitle}>
-                        {conversation.participantName}
-                      </ThemedText>
+                      <View style={{ flex: 1 }}>
+                        <ThemedText type="defaultSemiBold" style={styles.conversationTitle}>
+                          {conversation.participantName}
+                        </ThemedText>
+                        <ThemedText style={styles.lastMessage} numberOfLines={1}>
+                          {conversation.lastMessage}
+                        </ThemedText>
+                      </View>
                       {conversation.unreadCount > 0 && (
                         <View style={styles.unreadBadgeCircle}>
                           <ThemedText style={styles.badgeText}>
@@ -140,26 +147,23 @@ export default function MessagesScreen() {
                         </View>
                       )}
                     </View>
-                    <ThemedText style={styles.lastMessage} numberOfLines={1}>
-                      {conversation.lastMessage}
-                    </ThemedText>
                     <ThemedText style={styles.timestamp}>
                       {new Date(conversation.lastMessageTime).toLocaleString()}
                     </ThemedText>
                   </ThemedView>
                 </TouchableOpacity>
-              ))}
-            </View>
+              )}
+            />
           )}
-        </ScrollView>
+        </>
       ) : (
         <View style={styles.messageView}>
-          {/* Back & Header */}
+          {/* Message Header */}
           <View style={styles.messageHeader}>
-            <TouchableOpacity onPress={() => setView('conversations')}>
+            <TouchableOpacity onPress={() => setView('conversations')} style={styles.backButton}>
               <IconSymbol name="chevron.left" size={24} color={Colors[colorScheme ?? 'light'].tint} />
             </TouchableOpacity>
-            <ThemedText type="defaultSemiBold">
+            <ThemedText type="defaultSemiBold" style={styles.messageHeaderTitle}>
               {selectedConversation?.participantName}
             </ThemedText>
             <View style={styles.spacer} />
@@ -183,7 +187,7 @@ export default function MessagesScreen() {
               </View>
             )}
             inverted
-            style={styles.messagesList}
+            contentContainerStyle={styles.messagesList}
           />
 
           {/* Message Input */}
@@ -191,6 +195,7 @@ export default function MessagesScreen() {
             <TextInput
               style={styles.messageInput}
               placeholder="Type a message..."
+              placeholderTextColor="#999"
               value={messageText}
               onChangeText={setMessageText}
               multiline
@@ -202,7 +207,7 @@ export default function MessagesScreen() {
               style={styles.sendButton}>
               <IconSymbol
                 name="paperplane.fill"
-                size={20}
+                size={18}
                 color={messageText.trim() ? Colors[colorScheme ?? 'light'].tint : '#ccc'}
               />
             </TouchableOpacity>
@@ -217,44 +222,81 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  badgeHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 14,
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 18,
+  },
+  badgeHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  badgeIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: 'rgba(128, 128, 128, 0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  badgeHeaderTitle: {
+    marginBottom: 2,
+  },
+  badgeHeaderSubtitle: {
+    fontSize: 12,
+    opacity: 0.6,
+  },
   header: {
-    padding: 20,
-    paddingTop: 60,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 10,
   },
   unreadBadge: {
-    fontSize: 13,
+    fontSize: 12,
     opacity: 0.6,
-    marginTop: 4,
+    marginTop: 2,
+  },
+  listContent: {
+    paddingTop: 8,
+    paddingBottom: 20,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 50,
-  },
-  conversationsList: {
-    padding: 16,
-    gap: 8,
   },
   conversationCard: {
-    padding: 14,
-    borderRadius: 12,
     marginBottom: 8,
+    marginTop: 2,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 11,
+    backgroundColor: 'rgba(128, 128, 128, 0.08)',
     borderLeftWidth: 3,
     borderLeftColor: 'transparent',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 2,
   },
   conversationUnread: {
-    backgroundColor: 'rgba(37, 99, 235, 0.05)',
+    backgroundColor: 'rgba(37, 99, 235, 0.08)',
     borderLeftColor: '#007AFF',
   },
   conversationHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
+    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: 4,
   },
   conversationTitle: {
-    fontSize: 15,
+    fontSize: 14,
+    fontWeight: '600',
   },
   unreadBadgeCircle: {
     backgroundColor: '#007AFF',
@@ -263,29 +305,36 @@ const styles = StyleSheet.create({
     height: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    flexShrink: 0,
+    paddingHorizontal: 6,
+  },
+  unreadBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
   },
   badgeText: {
     color: '#fff',
     fontSize: 11,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   lastMessage: {
-    fontSize: 13,
-    opacity: 0.7,
+    fontSize: 12,
+    opacity: 0.6,
     marginBottom: 4,
+    marginRight: 24,
   },
   timestamp: {
-    fontSize: 11,
+    fontSize: 10,
     opacity: 0.5,
   },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 40,
-    marginTop: 100,
+    flex: 1,
+    gap: 12,
   },
   emptyText: {
-    marginTop: 12,
     opacity: 0.6,
     fontSize: 14,
   },
@@ -296,22 +345,29 @@ const styles = StyleSheet.create({
   messageHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  backButton: {
+    padding: 8,
+    marginLeft: -8,
+  },
+  messageHeaderTitle: {
+    fontSize: 16,
   },
   spacer: {
     flex: 1,
   },
   messagesList: {
-    flex: 1,
-    padding: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
   },
   messageBubble: {
     maxWidth: '80%',
     marginBottom: 8,
-    padding: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     borderRadius: 12,
   },
   myMessage: {
@@ -320,33 +376,37 @@ const styles = StyleSheet.create({
   },
   theirMessage: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(0,0,0,0.1)',
+    backgroundColor: 'rgba(128, 128, 128, 0.15)',
   },
   messageContent: {
     color: '#000',
+    fontSize: 14,
   },
   messageTime: {
-    fontSize: 11,
+    fontSize: 10,
     opacity: 0.6,
     marginTop: 4,
   },
   inputContainer: {
     flexDirection: 'row',
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     gap: 8,
     alignItems: 'flex-end',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.1)',
   },
   messageInput: {
     flex: 1,
     borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    maxHeight: 100,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(128, 128, 128, 0.12)',
+    maxHeight: 80,
+    fontSize: 14,
+    color: '#000',
   },
   sendButton: {
     padding: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

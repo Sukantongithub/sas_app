@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, ActivityIndicator, RefreshControl, Alert, Share } from 'react-native';
+import { StyleSheet, FlatList, View, TouchableOpacity, ActivityIndicator, RefreshControl, Alert, Share } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -401,60 +401,247 @@ export default function StudentAttendanceScreen() {
     );
   }
 
+  const getContentView = () => {
+    if (activeTab === 'daily') return renderDailyView();
+    if (activeTab === 'subject') return renderSubjectView();
+    if (activeTab === 'monthly') return renderMonthlyView();
+    if (activeTab === 'time') return renderTimeView();
+    return null;
+  };
+
+  const getListData = () => {
+    switch (activeTab) {
+      case 'daily':
+        return dailyData?.records || [];
+      case 'subject':
+        return subjectData?.subjectWise || [];
+      case 'monthly':
+        return monthlyData?.dailyBreakdown || [];
+      case 'time':
+        return timeRecords;
+      default:
+        return [];
+    }
+  };
+
   return (
-    <ScrollView 
-      style={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-    >
-      <ThemedView style={styles.header}>
-        <ThemedText type="title">My Attendance</ThemedText>
-        <TouchableOpacity onPress={handleDownloadReport}>
-          <IconSymbol name="arrow.down.circle" size={28} color={Colors[colorScheme ?? 'light'].tint} />
-        </TouchableOpacity>
-      </ThemedView>
+    <ThemedView style={styles.container}>
+      {/* Stats Overview Header */}
+      <View style={[styles.statsOverviewHeader, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '12' }]}>
+        <View style={styles.statsOverviewTitle}>
+          <View>
+            <ThemedText type="title" style={styles.overviewHeaderTitle}>My Attendance</ThemedText>
+            <ThemedText style={styles.overviewHeaderDate}>
+              {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+            </ThemedText>
+          </View>
+          <TouchableOpacity onPress={handleDownloadReport}>
+            <IconSymbol name="arrow.down.circle.fill" size={22} color={Colors[colorScheme ?? 'light'].tint} />
+          </TouchableOpacity>
+        </View>
+        {dailyData && dailyData.summary && (
+          <View style={styles.statsOverviewBar}>
+            <View style={styles.statOverviewItem}>
+              <ThemedText style={[styles.statOverviewNumber, { color: '#4CAF50' }]}>{dailyData.summary.present || 0}</ThemedText>
+              <ThemedText style={styles.statOverviewLabel}>Present</ThemedText>
+            </View>
+            <View style={styles.statOverviewDivider} />
+            <View style={styles.statOverviewItem}>
+              <ThemedText style={[styles.statOverviewNumber, { color: '#F44336' }]}>{dailyData.summary.absent || 0}</ThemedText>
+              <ThemedText style={styles.statOverviewLabel}>Absent</ThemedText>
+            </View>
+            <View style={styles.statOverviewDivider} />
+            <View style={styles.statOverviewItem}>
+              <ThemedText style={[styles.statOverviewNumber, { color: '#FF9800' }]}>{dailyData.summary.late || 0}</ThemedText>
+              <ThemedText style={styles.statOverviewLabel}>Late</ThemedText>
+            </View>
+          </View>
+        )}
+      </View>
 
       {/* Tab Navigation */}
-      <ThemedView style={styles.tabContainer}>
+      <View style={styles.tabBar}>
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'daily' && styles.activeTab]}
+          style={[styles.tabItem, activeTab === 'daily' && styles.activeTab]}
           onPress={() => setActiveTab('daily')}>
-          <IconSymbol name="calendar" size={20} color={activeTab === 'daily' ? '#fff' : Colors[colorScheme ?? 'light'].text} />
-          <ThemedText style={[styles.tabText, activeTab === 'daily' && styles.activeTabText]}>Daily</ThemedText>
+          <IconSymbol 
+            name="calendar" 
+            size={18} 
+            color={activeTab === 'daily' ? '#fff' : Colors[colorScheme ?? 'light'].text} 
+          />
+          <ThemedText style={[styles.tabLabel, activeTab === 'daily' && styles.activeTabLabel]}>Daily</ThemedText>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'subject' && styles.activeTab]}
-          onPress={() => setActiveTab('subject')}>
-          <IconSymbol name="book.fill" size={20} color={activeTab === 'subject' ? '#fff' : Colors[colorScheme ?? 'light'].text} />
-          <ThemedText style={[styles.tabText, activeTab === 'subject' && styles.activeTabText]}>Subject</ThemedText>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'monthly' && styles.activeTab]}
-          onPress={() => setActiveTab('monthly')}>
-          <IconSymbol name="chart.bar.fill" size={20} color={activeTab === 'monthly' ? '#fff' : Colors[colorScheme ?? 'light'].text} />
-          <ThemedText style={[styles.tabText, activeTab === 'monthly' && styles.activeTabText]}>Monthly</ThemedText>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'time' && styles.activeTab]}
-          onPress={() => setActiveTab('time')}>
-          <IconSymbol name="clock.fill" size={20} color={activeTab === 'time' ? '#fff' : Colors[colorScheme ?? 'light'].text} />
-          <ThemedText style={[styles.tabText, activeTab === 'time' && styles.activeTabText]}>Time</ThemedText>
-        </TouchableOpacity>
-      </ThemedView>
 
-      {/* Content */}
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === 'subject' && styles.activeTab]}
+          onPress={() => setActiveTab('subject')}>
+          <IconSymbol 
+            name="book.fill" 
+            size={18} 
+            color={activeTab === 'subject' ? '#fff' : Colors[colorScheme ?? 'light'].text} 
+          />
+          <ThemedText style={[styles.tabLabel, activeTab === 'subject' && styles.activeTabLabel]}>Subject</ThemedText>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === 'monthly' && styles.activeTab]}
+          onPress={() => setActiveTab('monthly')}>
+          <IconSymbol 
+            name="chart.bar.fill" 
+            size={18} 
+            color={activeTab === 'monthly' ? '#fff' : Colors[colorScheme ?? 'light'].text} 
+          />
+          <ThemedText style={[styles.tabLabel, activeTab === 'monthly' && styles.activeTabLabel]}>Month</ThemedText>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === 'time' && styles.activeTab]}
+          onPress={() => setActiveTab('time')}>
+          <IconSymbol 
+            name="clock.fill" 
+            size={18} 
+            color={activeTab === 'time' ? '#fff' : Colors[colorScheme ?? 'light'].text} 
+          />
+          <ThemedText style={[styles.tabLabel, activeTab === 'time' && styles.activeTabLabel]}>Time</ThemedText>
+        </TouchableOpacity>
+      </View>
+
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors[colorScheme ?? 'light'].tint} />
         </View>
       ) : (
-        <View style={styles.content}>
-          {activeTab === 'daily' && renderDailyView()}
-          {activeTab === 'subject' && renderSubjectView()}
-          {activeTab === 'monthly' && renderMonthlyView()}
-          {activeTab === 'time' && renderTimeView()}
-        </View>
+        <FlatList
+          data={getListData()}
+          keyExtractor={(item, index) => item._id || index.toString()}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl 
+              refreshing={refreshing} 
+              onRefresh={onRefresh}
+              tintColor={Colors[colorScheme ?? 'light'].tint}
+            />
+          }
+          renderItem={({ item }) => {
+            if (activeTab === 'daily' && item) {
+              return (
+                <ThemedView style={[styles.recordCard, { marginHorizontal: 16 }]}>
+                  <View style={styles.recordHeader}>
+                    <View>
+                      <ThemedText type="defaultSemiBold">{item.subject || 'Period'}</ThemedText>
+                      <ThemedText style={styles.recordTime}>
+                        {formatTime(item.entryTime)} {item.exitTime ? `- ${formatTime(item.exitTime)}` : ''}
+                      </ThemedText>
+                    </View>
+                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
+                      <IconSymbol name={getStatusIcon(item.status) as any} size={14} color="#fff" />
+                    </View>
+                  </View>
+                </ThemedView>
+              );
+            }
+            if (activeTab === 'subject' && item) {
+              return (
+                <ThemedView style={[styles.subjectCard, { marginHorizontal: 16 }]}>
+                  <View style={styles.subjectHeader}>
+                    <ThemedText type="defaultSemiBold">{item.subject}</ThemedText>
+                    <ThemedText style={[
+                      styles.percentage,
+                      { color: item.percentage >= 75 ? '#4CAF50' : '#F44336' }
+                    ]}>
+                      {item.percentage.toFixed(0)}%
+                    </ThemedText>
+                  </View>
+                  <View style={styles.progressBar}>
+                    <View style={[
+                      styles.progressFill,
+                      { 
+                        width: `${item.percentage}%`,
+                        backgroundColor: item.percentage >= 75 ? '#4CAF50' : '#F44336'
+                      }
+                    ]} />
+                  </View>
+                  <View style={styles.subjectStats}>
+                    <View style={styles.subjectStatItem}>
+                      <ThemedText style={styles.subjectStatNumber}>{item.present}</ThemedText>
+                      <ThemedText style={styles.subjectStatLabel}>P</ThemedText>
+                    </View>
+                    <View style={styles.subjectStatItem}>
+                      <ThemedText style={styles.subjectStatNumber}>{item.absent}</ThemedText>
+                      <ThemedText style={styles.subjectStatLabel}>A</ThemedText>
+                    </View>
+                    <View style={styles.subjectStatItem}>
+                      <ThemedText style={styles.subjectStatNumber}>{item.late}</ThemedText>
+                      <ThemedText style={styles.subjectStatLabel}>L</ThemedText>
+                    </View>
+                  </View>
+                </ThemedView>
+              );
+            }
+            if (activeTab === 'monthly' && item) {
+              const dayPercentage = item.total > 0 ? (item.present / item.total) * 100 : 0;
+              return (
+                <ThemedView style={[styles.dailyBreakdownCard, { marginHorizontal: 16 }]}>
+                  <View style={styles.dailyBreakdownHeader}>
+                    <ThemedText type="defaultSemiBold">
+                      {new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </ThemedText>
+                    <ThemedText style={{ color: dayPercentage >= 75 ? '#4CAF50' : '#F44336', fontWeight: '600' }}>
+                      {dayPercentage.toFixed(0)}%
+                    </ThemedText>
+                  </View>
+                  <View style={styles.dailyBreakdownStats}>
+                    <ThemedText style={styles.dailyBreakdownStat}>P: {item.present}</ThemedText>
+                    <ThemedText style={styles.dailyBreakdownStat}>A: {item.absent}</ThemedText>
+                    <ThemedText style={styles.dailyBreakdownStat}>L: {item.late}</ThemedText>
+                  </View>
+                </ThemedView>
+              );
+            }
+            if (activeTab === 'time' && item) {
+              return (
+                <ThemedView style={[styles.timeCard, { marginHorizontal: 16 }]}>
+                  <View style={styles.timeHeader}>
+                    <View>
+                      <ThemedText type="defaultSemiBold">{item.subject}</ThemedText>
+                      <ThemedText style={styles.timeDate}>
+                        {new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </ThemedText>
+                    </View>
+                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
+                      <ThemedText style={styles.statusText}>{item.status.toUpperCase()}</ThemedText>
+                    </View>
+                  </View>
+                  <View style={styles.timeDetails}>
+                    <View style={styles.timeDetailItem}>
+                      <IconSymbol name="arrow.right.circle" size={16} color={Colors[colorScheme ?? 'light'].tint} />
+                      <View>
+                        <ThemedText style={styles.timeDetailLabel}>Entry</ThemedText>
+                        <ThemedText style={styles.timeDetailValue}>{formatTime(item.entryTime)}</ThemedText>
+                      </View>
+                    </View>
+                    <View style={styles.timeDetailItem}>
+                      <IconSymbol name="arrow.left.circle" size={16} color={Colors[colorScheme ?? 'light'].tint} />
+                      <View>
+                        <ThemedText style={styles.timeDetailLabel}>Exit</ThemedText>
+                        <ThemedText style={styles.timeDetailValue}>{formatTime(item.exitTime)}</ThemedText>
+                      </View>
+                    </View>
+                  </View>
+                </ThemedView>
+              );
+            }
+            return null;
+          }}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <IconSymbol name="doc.text" size={40} color={Colors[colorScheme ?? 'light'].text} />
+              <ThemedText style={styles.emptyText}>No data available</ThemedText>
+            </View>
+          }
+        />
       )}
-    </ScrollView>
+    </ThemedView>
   );
 }
 
@@ -462,75 +649,116 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    padding: 20,
-    paddingTop: 60,
+  statsOverviewHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 16,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  statsOverviewTitle: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  overviewHeaderTitle: {
+    marginBottom: 2,
+  },
+  overviewHeaderDate: {
+    fontSize: 12,
+    opacity: 0.6,
+  },
+  statsOverviewBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    backgroundColor: 'rgba(128, 128, 128, 0.05)',
+    borderRadius: 12,
+    paddingVertical: 12,
+  },
+  statOverviewItem: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  statOverviewNumber: {
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  statOverviewLabel: {
+    fontSize: 11,
+    opacity: 0.7,
+    fontWeight: '500',
+  },
+  statOverviewDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: 'rgba(128, 128, 128, 0.2)',
+  },
+  floatingHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 10,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  tabContainer: {
-    flexDirection: 'row',
-    padding: 10,
-    gap: 8,
+  date: {
+    fontSize: 13,
+    opacity: 0.7,
+    marginTop: 2,
   },
-  tab: {
+  downloadButton: {
+    padding: 6,
+  },
+  tabBar: {
+    flexDirection: 'row',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    gap: 6,
+  },
+  tabItem: {
     flex: 1,
-    flexDirection: 'column',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    backgroundColor: 'rgba(128, 128, 128, 0.1)',
+    justifyContent: 'center',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    flexDirection: 'row',
     gap: 4,
   },
   activeTab: {
     backgroundColor: '#007AFF',
   },
-  tabText: {
-    fontSize: 12,
+  tabLabel: {
+    fontSize: 11,
+    fontWeight: '600',
   },
-  activeTabText: {
+  activeTabLabel: {
     color: '#fff',
   },
-  content: {
-    padding: 16,
+  listContent: {
+    paddingTop: 8,
+    paddingBottom: 20,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 50,
-  },
-  sectionTitle: {
-    marginTop: 20,
-    marginBottom: 12,
-  },
-  summaryCard: {
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  summaryGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 16,
-  },
-  summaryItem: {
-    alignItems: 'center',
-  },
-  summaryNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  summaryLabel: {
-    fontSize: 12,
-    marginTop: 4,
-    opacity: 0.7,
   },
   recordCard: {
-    padding: 16,
-    borderRadius: 12,
     marginBottom: 8,
+    marginTop: 2,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 11,
+    backgroundColor: 'rgba(128, 128, 128, 0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 2,
   },
   recordHeader: {
     flexDirection: 'row',
@@ -539,153 +767,145 @@ const styles = StyleSheet.create({
   },
   recordTime: {
     fontSize: 12,
-    marginTop: 4,
-    opacity: 0.7,
+    marginTop: 2,
+    opacity: 0.6,
   },
   statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     paddingVertical: 6,
-    borderRadius: 16,
-    gap: 4,
+    borderRadius: 8,
   },
   statusText: {
     color: '#fff',
-    fontSize: 11,
-    fontWeight: 'bold',
+    fontSize: 10,
+    fontWeight: '600',
   },
   subjectCard: {
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
+    marginBottom: 8,
+    marginTop: 2,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 11,
+    backgroundColor: 'rgba(128, 128, 128, 0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 2,
   },
   subjectHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   percentage: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '700',
   },
   progressBar: {
-    height: 8,
+    height: 6,
     backgroundColor: 'rgba(0,0,0,0.1)',
-    borderRadius: 4,
+    borderRadius: 3,
     overflow: 'hidden',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   progressFill: {
     height: '100%',
   },
   subjectStats: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'flex-start',
+    gap: 16,
   },
   subjectStatItem: {
     alignItems: 'center',
   },
   subjectStatNumber: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 14,
+    fontWeight: '700',
   },
   subjectStatLabel: {
-    fontSize: 11,
+    fontSize: 10,
     marginTop: 2,
-    opacity: 0.7,
-  },
-  monthlyCard: {
-    padding: 20,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  monthlyCircle: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginVertical: 20,
-  },
-  monthlyPercentage: {
-    fontSize: 36,
-    fontWeight: 'bold',
-  },
-  monthlyLabel: {
-    fontSize: 14,
-    marginTop: 4,
-    opacity: 0.7,
-  },
-  monthlyStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
-    marginTop: 16,
-  },
-  monthlyStatItem: {
-    alignItems: 'center',
-    gap: 4,
-  },
-  monthlyStatNumber: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  monthlyStatLabel: {
-    fontSize: 11,
-    opacity: 0.7,
+    opacity: 0.6,
   },
   dailyBreakdownCard: {
-    padding: 12,
-    borderRadius: 8,
     marginBottom: 8,
+    marginTop: 2,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 11,
+    backgroundColor: 'rgba(128, 128, 128, 0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 2,
   },
   dailyBreakdownHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   dailyBreakdownStats: {
     flexDirection: 'row',
-    gap: 16,
+    gap: 12,
   },
   dailyBreakdownStat: {
     fontSize: 12,
     opacity: 0.7,
   },
   timeCard: {
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
+    marginBottom: 8,
+    marginTop: 2,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 11,
+    backgroundColor: 'rgba(128, 128, 128, 0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 2,
   },
   timeHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 10,
   },
   timeDate: {
-    fontSize: 12,
-    marginTop: 4,
-    opacity: 0.7,
+    fontSize: 11,
+    marginTop: 2,
+    opacity: 0.6,
   },
   timeDetails: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
+    gap: 16,
   },
   timeDetailItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   timeDetailLabel: {
-    fontSize: 11,
-    opacity: 0.7,
+    fontSize: 10,
+    opacity: 0.6,
   },
   timeDetailValue: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    gap: 12,
+  },
+  emptyText: {
+    fontSize: 14,
+    opacity: 0.6,
   },
 });
