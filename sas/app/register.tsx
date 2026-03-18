@@ -14,12 +14,20 @@ export default function RegisterScreen() {
   const colorScheme = useColorScheme();
   const { toggleTheme, isDarkMode } = useTheme();
   const { register } = useAuth();
+  const roleOptions = [
+    { key: 'student', label: 'Student', icon: 'graduationcap.fill' },
+    { key: 'parent', label: 'Parents', icon: 'person.2.fill' },
+    { key: 'staff', label: 'Staff', icon: 'person.3.fill' },
+    { key: 'hod', label: 'HOD', icon: 'rectangle.3.group' },
+    { key: 'admin', label: 'Admin', icon: 'person.circle.fill' },
+  ] as const;
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
     confirmPassword: '',
-    role: 'student' as 'admin' | 'teacher' | 'student',
+    role: 'student' as 'admin' | 'hod' | 'staff' | 'parent' | 'student',
   });
   const [isRegistering, setIsRegistering] = useState(false);
 
@@ -182,31 +190,31 @@ export default function RegisterScreen() {
           <View style={styles.inputGroup}>
             <ThemedText style={[styles.label, { color: Colors[colorScheme ?? 'light'].text }]}>Select Role</ThemedText>
             <View style={styles.roleContainer}>
-              {(['student', 'teacher'] as const).map((role) => (
+              {roleOptions.map((roleOption) => (
                 <TouchableOpacity
-                  key={role}
+                  key={roleOption.key}
                   style={[
                     styles.roleButton,
                     { 
                       backgroundColor: Colors[colorScheme ?? 'light'].inputBackground,
-                      borderColor: formData.role === role 
+                      borderColor: formData.role === roleOption.key 
                         ? Colors[colorScheme ?? 'light'].tint 
                         : Colors[colorScheme ?? 'light'].border,
                     },
-                    formData.role === role && styles.roleButtonActive
+                    formData.role === roleOption.key && styles.roleButtonActive
                   ]}
-                  onPress={() => setFormData({ ...formData, role })}>
+                  onPress={() => setFormData({ ...formData, role: roleOption.key })}>
                   <IconSymbol 
-                    name={role === 'student' ? 'graduationcap.fill' : 'figure.stand'}
+                    name={roleOption.icon}
                     size={24} 
-                    color={formData.role === role ? Colors[colorScheme ?? 'light'].tint : Colors[colorScheme ?? 'light'].textSecondary} 
+                    color={formData.role === roleOption.key ? Colors[colorScheme ?? 'light'].tint : Colors[colorScheme ?? 'light'].textSecondary} 
                   />
                   <ThemedText
                     style={[
                       styles.roleText,
-                      { color: formData.role === role ? Colors[colorScheme ?? 'light'].tint : Colors[colorScheme ?? 'light'].text }
+                      { color: formData.role === roleOption.key ? Colors[colorScheme ?? 'light'].tint : Colors[colorScheme ?? 'light'].text }
                     ]}>
-                    {role.charAt(0).toUpperCase() + role.slice(1)}
+                    {roleOption.label}
                   </ThemedText>
                 </TouchableOpacity>
               ))}

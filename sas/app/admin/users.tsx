@@ -15,7 +15,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/context/AuthContext';
-import AdminHeader from './AdminHeader';
+import AdminHeader from '@/app/admin/AdminHeader';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -35,7 +35,7 @@ interface User {
   };
 }
 
-const ROLES = ['super_admin', 'admin', 'faculty', 'teacher', 'student', 'parent', 'staff', 'hr'];
+const ROLES = ['super_admin', 'admin', 'hod', 'staff', 'student', 'parent'];
 
 export default function UserManagementScreen() {
   const colorScheme = useColorScheme();

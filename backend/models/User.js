@@ -1,6 +1,16 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
+const normalizeRole = (role) => {
+  if (!role) return 'student';
+  const value = String(role).trim().toLowerCase();
+
+  // Canonical role aliases to keep old data/input compatible.
+  if (value === 'parents') return 'parent';
+  if (value === 'staff') return 'staff';
+  return value;
+};
+
 const userSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -20,7 +30,8 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['super_admin', 'admin', 'faculty', 'teacher', 'student', 'parent', 'staff', 'hr'],
+    enum: ['super_admin', 'admin', 'hod', 'staff', 'student', 'parent'],
+    set: normalizeRole,
     default: 'student',
     required: true
   },

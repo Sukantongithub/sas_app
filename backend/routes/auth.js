@@ -7,6 +7,7 @@ const { requireAuth, requireRoles } = require('../middleware/auth');
 const { validateRequest } = require('../middleware/validate');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+const ROLE_VALUES = ['super_admin', 'admin', 'hod', 'staff', 'student', 'parent'];
 
 // Generate JWT token
 const generateToken = (userId) => {
@@ -23,18 +24,14 @@ router.post('/register',
     body('name').notEmpty().withMessage('Name is required'),
     body('email').isEmail().withMessage('Valid email is required'),
     body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
-    body('role').optional().isIn(['super_admin', 'admin', 'faculty', 'teacher', 'student']).withMessage('Invalid role'),
+    body('role').optional().isIn(ROLE_VALUES).withMessage('Invalid role'),
   ],
   validateRequest,
   async (req, res) => {
     try {
       const { name, email, password, role } = req.body;
 
-      // Allow self-registration for student/teacher; other roles require admin flow
       const requestedRole = role || 'student';
-      if (!['student', 'teacher'].includes(requestedRole)) {
-        return res.status(403).json({ message: 'Only admins can create privileged roles' });
-      }
 
       // Check if user already exists
       const existingUser = await User.findOne({ email });
@@ -248,7 +245,7 @@ router.get('/users', requireAuth, requireRoles('super_admin', 'admin'), async (r
 router.put('/users/:id/role',
   requireAuth,
   requireRoles('super_admin', 'admin'),
-  [body('role').isIn(['super_admin', 'admin', 'faculty', 'student']).withMessage('Invalid role')],
+  [body('role').isIn(ROLE_VALUES).withMessage('Invalid role')],
   validateRequest,
   async (req, res) => {
     try {
