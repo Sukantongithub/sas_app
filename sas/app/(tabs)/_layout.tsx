@@ -8,6 +8,46 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/context/AuthContext';
+import { TAB_NAVIGATION, AppRole } from '@/constants/navigationConfig';
+
+type RawRole = string | undefined;
+
+type TabRoute =
+  | 'index'
+  | 'explore'
+  | 'student-attendance'
+  | 'interactions'
+  | 'timetable'
+  | 'alerts'
+  | 'profile'
+  | 'admin'
+  | 'history';
+
+function getTabPath(route: TabRoute): string {
+  return route === 'index' ? '/(tabs)' : `/(tabs)/${route}`;
+}
+
+const TAB_DEFINITIONS: Array<{ route: TabRoute; title: string; icon: string }> = [
+  { route: 'index', title: 'Dashboard', icon: 'house.fill' },
+  { route: 'explore', title: 'Mark Attend.', icon: 'checkmark.circle.fill' },
+  { route: 'student-attendance', title: 'Attendance', icon: 'chart.bar.fill' },
+  { route: 'interactions', title: 'Requests', icon: 'tray.and.arrow.down.fill' },
+  { route: 'timetable', title: 'Timetable', icon: 'calendar.fill' },
+  { route: 'alerts', title: 'Messages', icon: 'bubble.left.and.bubble.right.fill' },
+  { route: 'profile', title: 'Profile', icon: 'person.circle.fill' },
+  { route: 'admin', title: 'Admin', icon: 'lock.shield.fill' },
+  { route: 'history', title: 'History', icon: 'clock.fill' },
+];
+
+function normalizeRole(role?: RawRole): AppRole {
+  const value = String(role || '').trim().toLowerCase();
+  if (value === 'admin') return 'admin';
+  if (value === 'super_admin') return 'super_admin';
+  if (value === 'hod') return 'hod';
+  if (value === 'staff' || value === 'teacher' || value === 'faculty' || value === 'hr') return 'staff';
+  if (value === 'parent' || value === 'parents') return 'parent';
+  return 'student';
+}
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
@@ -17,18 +57,27 @@ export default function TabLayout() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const isStudent = user?.role === 'student';
-  const isTeacher = user?.role === 'teacher';
-  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
-  const isAdminOrTeacher = isAdmin || isTeacher;
+  // Get role-based navigation config
+  const userRole = normalizeRole(user?.role);
+  const navConfig = TAB_NAVIGATION[userRole];
 
-  if (isAdmin) {
-    router.replace('/admin');
+  // Redirect admin users to admin panel.
+  useEffect(() => {
+    if (user?.role === 'admin' || user?.role === 'super_admin') {
+      router.replace('/admin');
+    }
+  }, [user?.role, router]);
+
+  if (user?.role === 'admin' || user?.role === 'super_admin') {
     return null;
   }
 
   const TAB_HEIGHT = 64;
   const BOTTOM_PAD = Math.max(insets.bottom, 8);
+  const tabs = navConfig?.tabs || [];
+
+  // Create set of allowed tab routes for this role.
+  const allowedRoutes = new Set(tabs.map((t) => t.route as TabRoute));
 
   return (
     <Tabs
@@ -64,121 +113,30 @@ export default function TabLayout() {
         tabBarIconStyle: {
           marginBottom: 0,
         },
-        sceneContainerStyle: {
-          // leave room for frosted tab bar on iOS
-          ...(Platform.OS === 'ios' && { paddingBottom: TAB_HEIGHT + BOTTOM_PAD }),
-        },
         headerShown: false,
         tabBarButton: HapticTab,
       }}
-      initialRouteName="index"
+      initialRouteName={tabs[0]?.route || 'student-attendance'}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Students',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={focused ? [styles.pill, { backgroundColor: colors.tint + '18' }] : styles.pillPlaceholder}>
-              <IconSymbol size={24} name="person.2.fill" color={color} />
-            </View>
-          ),
-          href: isAdminOrTeacher ? '/(tabs)' : null,
-        }}
-      />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          title: 'Mark Attend.',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={focused ? [styles.pill, { backgroundColor: colors.tint + '18' }] : styles.pillPlaceholder}>
-              <IconSymbol size={24} name="checkmark.circle.fill" color={color} />
-            </View>
-          ),
-          href: isTeacher ? '/(tabs)/explore' : null,
-        }}
-      />
-      <Tabs.Screen
-        name="student-attendance"
-        options={{
-          title: 'Attendance',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={focused ? [styles.pill, { backgroundColor: colors.tint + '18' }] : styles.pillPlaceholder}>
-              <IconSymbol size={24} name="chart.bar.fill" color={color} />
-            </View>
-          ),
-          href: isStudent ? '/(tabs)/student-attendance' : null,
-        }}
-      />
-      <Tabs.Screen
-        name="admin"
-        options={{
-          title: 'Admin',
-          tabBarIcon: ({ color }) => (
-            <View style={styles.pillPlaceholder}>
-              <IconSymbol size={24} name="lock.shield.fill" color={color} />
-            </View>
-          ),
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="history"
-        options={{
-          title: 'History',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={focused ? [styles.pill, { backgroundColor: colors.tint + '18' }] : styles.pillPlaceholder}>
-              <IconSymbol size={24} name="clock.fill" color={color} />
-            </View>
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="interactions"
-        options={{
-          title: 'Requests',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={focused ? [styles.pill, { backgroundColor: colors.tint + '18' }] : styles.pillPlaceholder}>
-              <IconSymbol size={24} name="tray.and.arrow.down.fill" color={color} />
-            </View>
-          ),
-          href: isStudent ? '/(tabs)/interactions' : null,
-        }}
-      />
-      <Tabs.Screen
-        name="timetable"
-        options={{
-          title: 'Timetable',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={focused ? [styles.pill, { backgroundColor: colors.tint + '18' }] : styles.pillPlaceholder}>
-              <IconSymbol size={24} name="calendar.fill" color={color} />
-            </View>
-          ),
-          href: isStudent ? '/(tabs)/timetable' : null,
-        }}
-      />
-      <Tabs.Screen
-        name="alerts"
-        options={{
-          title: 'Messages',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={focused ? [styles.pill, { backgroundColor: colors.tint + '18' }] : styles.pillPlaceholder}>
-              <IconSymbol size={24} name="bubble.left.and.bubble.right.fill" color={color} />
-            </View>
-          ),
-          href: '/(tabs)/alerts',
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={focused ? [styles.pill, { backgroundColor: colors.tint + '18' }] : styles.pillPlaceholder}>
-              <IconSymbol size={24} name="person.circle.fill" color={color} />
-            </View>
-          ),
-        }}
-      />
+      {/* Register all tab files and only expose role-allowed ones in the bar. */}
+      {TAB_DEFINITIONS.map((tabConfig) => {
+        const isAllowed = allowedRoutes.has(tabConfig.route);
+        return (
+          <Tabs.Screen
+            key={tabConfig.route}
+            name={tabConfig.route as any}
+            options={{
+              title: tabConfig.title,
+              tabBarIcon: ({ color, focused }) => (
+                <View style={focused ? [styles.pill, { backgroundColor: colors.tint + '18' }] : styles.pillPlaceholder}>
+                  <IconSymbol size={24} name={tabConfig.icon as any} color={color} />
+                </View>
+              ),
+              href: isAllowed ? (getTabPath(tabConfig.route) as any) : null,
+            }}
+          />
+        );
+      })}
     </Tabs>
   );
 }

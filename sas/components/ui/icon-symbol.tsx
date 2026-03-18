@@ -44,6 +44,8 @@ const MAPPING = {
   // Communication
   'envelope.fill': 'email',
   'envelope': 'mail-outline',
+  'bubble.left.and.bubble.right.fill': 'question-answer',
+  'bubble.left.and.bubble.right': 'chat-bubble-outline',
   
   // Education
   'book.fill': 'menu-book',
@@ -73,6 +75,9 @@ const MAPPING = {
   // Status Icons
   'checkmark.circle.fill': 'check-circle',
   'checkmark.circle': 'check-circle-outline',
+  'tray.and.arrow.down.fill': 'move-to-inbox',
+  'tray.and.arrow.down': 'inbox',
+  'lock.shield.fill': 'security',
   'xmark.circle.fill': 'cancel',
   'xmark.circle': 'highlight-off',
   'exclamationmark.triangle.fill': 'warning',
