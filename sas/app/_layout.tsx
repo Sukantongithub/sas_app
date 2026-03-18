@@ -8,6 +8,7 @@ import { LogBox } from 'react-native';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AttendanceProvider } from '@/context/AttendanceContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { ThemeProvider as CustomThemeProvider } from '@/context/ThemeContext';
 
 // Suppress react-native-web deprecation warnings early
 if (typeof console !== 'undefined') {
@@ -64,8 +65,9 @@ function RootLayoutNav() {
         console.log('_layout: Authenticated admin on login/register, redirecting to admin');
         router.replace('/admin');
       } else {
-        console.log('_layout: Authenticated user on login/register, redirecting to tabs');
-        router.replace('/(tabs)');
+        console.log('_layout: Authenticated user on login/register, redirecting to tabs/index');
+        // Always start at the first page (index) on login
+        router.replace('/(tabs)/index');
       }
     } else if (isAuthenticated && isAdmin && inTabsGroup) {
       // Redirect admin users away from tabs to admin panel
@@ -90,10 +92,12 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <AttendanceProvider>
-        <RootLayoutNav />
-      </AttendanceProvider>
-    </AuthProvider>
+    <CustomThemeProvider>
+      <AuthProvider>
+        <AttendanceProvider>
+          <RootLayoutNav />
+        </AttendanceProvider>
+      </AuthProvider>
+    </CustomThemeProvider>
   );
 }

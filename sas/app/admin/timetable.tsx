@@ -64,6 +64,7 @@ export default function TimetableManagementScreen() {
   const [timetables, setTimetables] = useState<Timetable[]>([]);
   const [classes, setClasses] = useState<ClassOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -160,6 +161,7 @@ export default function TimetableManagementScreen() {
   };
 
   const handleSubmit = async () => {
+    // Validate required fields
     if (!formData.classId || !formData.dayOfWeek) {
       Alert.alert('Error', 'Please fill in all required fields');
       return;
@@ -171,11 +173,25 @@ export default function TimetableManagementScreen() {
       return;
     }
 
+    setSubmitting(true);
     try {
       const url = editingId
         ? `${API_BASE_URL}/admin/timetables/${editingId}`
         : `${API_BASE_URL}/admin/timetables`;
       const method = editingId ? 'PUT' : 'POST';
+
+      // Prepare payload - convert empty strings to undefined for optional fields
+      const payload = {
+        ...formData,
+        section: formData.section.trim() || undefined,
+        periods: formData.periods.map(p => ({
+          ...p,
+          room: p.room?.trim() || undefined,
+          teacherId: p.teacherId || undefined,
+        })),
+      };
+
+      console.log('Submitting timetable:', { url, method, payload });
 
       const response = await fetch(url, {
         method,
@@ -183,19 +199,29 @@ export default function TimetableManagementScreen() {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
+      const result = await response.json();
+      console.log('Response:', result);
+
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to save timetable');
+        // Handle validation errors specially
+        if (result.errors && Array.isArray(result.errors)) {
+          const errorMessages = result.errors.map((e: any) => e.message).join('\n');
+          throw new Error(errorMessages);
+        }
+        throw new Error(result.message || 'Failed to save timetable');
       }
 
       Alert.alert('Success', `Timetable ${editingId ? 'updated' : 'created'} successfully`);
       resetForm();
       await fetchTimetables();
     } catch (error: any) {
+      console.error('Timetable submission error:', error);
       Alert.alert('Error', error.message || 'Failed to save timetable');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -418,14 +444,28 @@ export default function TimetableManagementScreen() {
             </TouchableOpacity>
 
             <View style={styles.buttonRow}>
-              <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={resetForm}>
+              <TouchableOpacity 
+                style={[styles.button, styles.cancelButton]} 
+                onPress={resetForm}
+                disabled={submitting}>
                 <ThemedText style={styles.buttonText}>Cancel</ThemedText>
               </TouchableOpacity>
 
-              <TouchableOpacity style={[styles.button, styles.createButton]} onPress={handleSubmit}>
-                <ThemedText style={[styles.buttonText, { color: '#fff' }]}>
-                  {editingId ? 'Update' : 'Create'}
-                </ThemedText>
+              <TouchableOpacity 
+                style={[
+                  styles.button, 
+                  styles.createButton,
+                  submitting && styles.buttonDisabled
+                ]} 
+                onPress={handleSubmit}
+                disabled={submitting}>
+                {submitting ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <ThemedText style={[styles.buttonText, { color: '#fff' }]}>
+                    {editingId ? 'Update' : 'Create'}
+                  </ThemedText>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -662,6 +702,9 @@ const styles = StyleSheet.create({
   },
   createButton: {
     backgroundColor: '#2196f3',
+  },
+  buttonDisabled: {
+    opacity: 0.5,
   },
   buttonText: {
     fontWeight: '600',

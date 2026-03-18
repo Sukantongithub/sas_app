@@ -6,9 +6,13 @@ const API_BASE_URL = 'http://localhost:5000/api';
 // For iOS Simulator use: http://localhost:5000/api
 // For Physical Device use: http://YOUR_IP_ADDRESS:5000/api
 
-const authHeaders = (token?: string) => (
-  token ? { Authorization: `Bearer ${token}` } : {}
-);
+const authHeaders = (token?: string): Record<string, string> => {
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
+};
 
 const handleResponse = async (response: Response) => {
   const text = await response.text();

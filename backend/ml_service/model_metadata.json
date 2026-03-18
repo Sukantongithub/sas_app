@@ -1,0 +1,61 @@
+{
+  "version": "2.0.0",
+  "trained_at": "2026-03-17T08:53:19.071224",
+  "n_samples": 9000,
+  "n_real_samples": 1000,
+  "n_synthetic": 8000,
+  "n_features": 22,
+  "feature_names": [
+    "mean",
+    "std",
+    "variance",
+    "minimum",
+    "maximum",
+    "motion_range",
+    "percentile_25",
+    "percentile_50",
+    "percentile_75",
+    "iqr",
+    "skewness",
+    "kurt",
+    "coeff_variation",
+    "mean_abs_diff",
+    "std_diff",
+    "peak_ratio",
+    "spike_count",
+    "zero_crossing_rate",
+    "dominant_freq_power",
+    "spectral_entropy",
+    "autocorr_lag1",
+    "regularity_score"
+  ],
+  "best_params": {
+    "n_estimators": 300,
+    "max_depth": 25,
+    "min_samples_split": 2,
+    "min_samples_leaf": 1,
+    "max_features": "sqrt"
+  },
+  "cv_folds": 5,
+  "csv_path": "motion_training_dataset.csv",
+  "window_size": 20,
+  "cv_accuracy_mean": 0.999333,
+  "cv_accuracy_std": 0.000544,
+  "cv_f1_mean": 0.999333,
+  "cv_auc_mean": 0.999997,
+  "test_accuracy": 0.998889,
+  "test_f1": 0.998889,
+  "test_auc": 0.999995,
+  "sensitivity": 0.998889,
+  "specificity": 0.998889,
+  "confusion_matrix": [
+    [
+      899,
+      1
+    ],
+    [
+      1,
+      899
+    ]
+  ]
+}

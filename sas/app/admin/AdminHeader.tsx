@@ -79,10 +79,10 @@ export default function AdminHeader({ title }: AdminHeaderProps) {
             <TouchableOpacity
               style={styles.bellButton}
               onPress={() => setShowNotifications(!showNotifications)}>
-              <IconSymbol 
-                size={22} 
-                name={notificationCount > 0 ? "bell.badge.fill" : "bell"} 
-                color={notificationCount > 0 ? '#F44336' : colors.text} 
+              <IconSymbol
+                size={22}
+                name={notificationCount > 0 ? "bell.badge.fill" : "bell"}
+                color={notificationCount > 0 ? '#F44336' : colors.text}
               />
               {notificationCount > 0 && (
                 <View style={styles.compactBadge}>

@@ -9,8 +9,10 @@ import {
   ActivityIndicator,
   FlatList,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRouter } from 'expo-router';
@@ -155,63 +157,117 @@ export default function StudentsManagementScreen() {
         </View>
 
         {showForm && (
-          <View style={[styles.formContainer, styles.cardShadow]}>
-            <ThemedText type="defaultSemiBold" style={styles.formTitle}>
-              Create New Student
-            </ThemedText>
+          <View style={[styles.formContainer, { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground, borderColor: Colors[colorScheme ?? 'light'].tint }]}>
+            <View style={styles.formHeader}>
+              <IconSymbol name="person.badge.plus.fill" size={28} color={Colors[colorScheme ?? 'light'].tint} />
+              <ThemedText type="defaultSemiBold" style={styles.formTitle}>
+                Create New Student
+              </ThemedText>
+            </View>
 
-            <TextInput
-              style={styles.input}
-              placeholder="Full Name"
-              placeholderTextColor="#999"
-              value={formData.name}
-              onChangeText={(text) => setFormData({ ...formData, name: text })}
-            />
+            <View style={styles.inputGroup}>
+              <ThemedText style={styles.inputLabel}>Full Name *</ThemedText>
+              <View style={[styles.inputWrapper, { backgroundColor: Colors[colorScheme ?? 'light'].inputBackground, borderColor: Colors[colorScheme ?? 'light'].border }]}>
+                <IconSymbol name="person.fill" size={18} color={Colors[colorScheme ?? 'light'].textSecondary} />
+                <TextInput
+                  style={[styles.input, { color: Colors[colorScheme ?? 'light'].text }]}
+                  placeholder="Full Name"
+                  placeholderTextColor={Colors[colorScheme ?? 'light'].textSecondary}
+                  value={formData.name}
+                  onChangeText={(text) => setFormData({ ...formData, name: text })}
+                  autoComplete="off"
+                  textContentType="none"
+                />
+              </View>
+            </View>
 
-            <TextInput
-              style={styles.input}
-              placeholder="Roll Number"
-              placeholderTextColor="#999"
-              value={formData.rollNumber}
-              onChangeText={(text) => setFormData({ ...formData, rollNumber: text })}
-            />
+            <View style={styles.inputGroup}>
+              <ThemedText style={styles.inputLabel}>Roll Number *</ThemedText>
+              <View style={[styles.inputWrapper, { backgroundColor: Colors[colorScheme ?? 'light'].inputBackground, borderColor: Colors[colorScheme ?? 'light'].border }]}>
+                <IconSymbol name="number.square.fill" size={18} color={Colors[colorScheme ?? 'light'].textSecondary} />
+                <TextInput
+                  style={[styles.input, { color: Colors[colorScheme ?? 'light'].text }]}
+                  placeholder="Roll Number"
+                  placeholderTextColor={Colors[colorScheme ?? 'light'].textSecondary}
+                  value={formData.rollNumber}
+                  onChangeText={(text) => setFormData({ ...formData, rollNumber: text })}
+                  autoComplete="off"
+                  textContentType="none"
+                />
+              </View>
+            </View>
 
-            <TextInput
-              style={styles.input}
-              placeholder="Email"
-              placeholderTextColor="#999"
-              value={formData.email}
-              onChangeText={(text) => setFormData({ ...formData, email: text })}
-            />
+            <View style={styles.inputGroup}>
+              <ThemedText style={styles.inputLabel}>Email *</ThemedText>
+              <View style={[styles.inputWrapper, { backgroundColor: Colors[colorScheme ?? 'light'].inputBackground, borderColor: Colors[colorScheme ?? 'light'].border }]}>
+                <IconSymbol name="envelope.fill" size={18} color={Colors[colorScheme ?? 'light'].textSecondary} />
+                <TextInput
+                  style={[styles.input, { color: Colors[colorScheme ?? 'light'].text }]}
+                  placeholder="Email"
+                  placeholderTextColor={Colors[colorScheme ?? 'light'].textSecondary}
+                  value={formData.email}
+                  onChangeText={(text) => setFormData({ ...formData, email: text })}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoComplete="off"
+                  textContentType="none"
+                />
+              </View>
+            </View>
 
-            <TextInput
-              style={styles.input}
-              placeholder="Class"
-              placeholderTextColor="#999"
-              value={formData.class}
-              onChangeText={(text) => setFormData({ ...formData, class: text })}
-            />
+            <View style={styles.inputGroup}>
+              <ThemedText style={styles.inputLabel}>Class *</ThemedText>
+              <View style={[styles.inputWrapper, { backgroundColor: Colors[colorScheme ?? 'light'].inputBackground, borderColor: Colors[colorScheme ?? 'light'].border }]}>
+                <IconSymbol name="book.fill" size={18} color={Colors[colorScheme ?? 'light'].textSecondary} />
+                <TextInput
+                  style={[styles.input, { color: Colors[colorScheme ?? 'light'].text }]}
+                  placeholder="Class"
+                  placeholderTextColor={Colors[colorScheme ?? 'light'].textSecondary}
+                  value={formData.class}
+                  onChangeText={(text) => setFormData({ ...formData, class: text })}
+                  autoComplete="off"
+                  textContentType="none"
+                />
+              </View>
+            </View>
 
             <View style={styles.buttonRow}>
               <TouchableOpacity
-                style={[styles.button, styles.cancelButton]}
+                style={[styles.button, styles.cancelButton, { backgroundColor: Colors[colorScheme ?? 'light'].border }]}
                 onPress={() => {
                   setShowForm(false);
                   setFormData({ name: '', rollNumber: '', email: '', class: '' });
                 }}>
-                <ThemedText style={styles.buttonText}>Cancel</ThemedText>
+                <ThemedText style={[styles.buttonText, { color: Colors[colorScheme ?? 'light'].text }]}>Cancel</ThemedText>
               </TouchableOpacity>
 
-              <TouchableOpacity style={[styles.button, styles.createButton]} onPress={handleCreateStudent}>
-                <ThemedText style={[styles.buttonText, { color: '#fff' }]}>Create</ThemedText>
+              <TouchableOpacity style={styles.button} onPress={handleCreateStudent}>
+                <LinearGradient
+                  colors={[Colors[colorScheme ?? 'light'].gradientStart, Colors[colorScheme ?? 'light'].gradientEnd]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.gradientButton}>
+                  <IconSymbol name="checkmark.circle.fill" size={18} color="#fff" />
+                  <ThemedText style={[styles.buttonText, { color: '#fff' }]}>Create Student</ThemedText>
+                </LinearGradient>
               </TouchableOpacity>
             </View>
           </View>
         )}
 
         {!showForm && (
-          <TouchableOpacity style={styles.addButton} onPress={() => setShowForm(true)}>
-            <ThemedText style={styles.addButtonText}>+ Add Student</ThemedText>
+          <TouchableOpacity style={styles.addButtonWrapper} onPress={() => {
+            setFormData({ name: '', rollNumber: '', email: '', class: '' });
+            setShowForm(true);
+          }}>
+            <LinearGradient
+              colors={[Colors[colorScheme ?? 'light'].gradientStart, Colors[colorScheme ?? 'light'].gradientEnd]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.addButton}>
+              <IconSymbol name="plus.circle.fill" size={22} color="#fff" />
+              <ThemedText style={styles.addButtonText}>Add New Student</ThemedText>
+            </LinearGradient>
           </TouchableOpacity>
         )}
 
@@ -220,29 +276,43 @@ export default function StudentsManagementScreen() {
           data={students}
           keyExtractor={(item) => item._id}
           renderItem={({ item }) => (
-            <View style={[styles.studentCard, styles.cardShadow]}>
+            <View style={[styles.studentCard, { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground, borderColor: Colors[colorScheme ?? 'light'].border }]}>
+              <View style={[styles.studentAvatar, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '20' }]}>
+                <IconSymbol name="person.fill" size={24} color={Colors[colorScheme ?? 'light'].tint} />
+              </View>
               <View style={styles.studentInfo}>
                 <ThemedText type="defaultSemiBold" style={styles.studentName}>
                   {item.name}
                 </ThemedText>
-                <ThemedText style={styles.studentDetail}>Roll: {item.rollNumber}</ThemedText>
-                <ThemedText style={styles.studentDetail}>{item.email}</ThemedText>
-                <ThemedText style={styles.studentDetail}>Class: {item.class}</ThemedText>
+                <View style={styles.detailRow}>
+                  <IconSymbol name="number.square" size={14} color={Colors[colorScheme ?? 'light'].textSecondary} />
+                  <ThemedText style={styles.studentDetail}>Roll: {item.rollNumber}</ThemedText>
+                </View>
+                <View style={styles.detailRow}>
+                  <IconSymbol name="envelope" size={14} color={Colors[colorScheme ?? 'light'].textSecondary} />
+                  <ThemedText style={styles.studentDetail}>{item.email}</ThemedText>
+                </View>
+                <View style={styles.detailRow}>
+                  <IconSymbol name="book" size={14} color={Colors[colorScheme ?? 'light'].textSecondary} />
+                  <ThemedText style={styles.studentDetail}>Class: {item.class}</ThemedText>
+                </View>
                 {item.stats && (
-                  <View style={styles.statsRow}>
-                    <ThemedText style={styles.statsText}>
-                      Attendance: {item.stats.attendancePercentage}%
-                    </ThemedText>
-                    <ThemedText style={styles.statsText}>
-                      Present: {item.stats.present}/{item.stats.totalClasses}
+                  <View style={[styles.statsRow, { borderTopColor: Colors[colorScheme ?? 'light'].border }]}>
+                    <View style={[styles.statBadge, { backgroundColor: Colors[colorScheme ?? 'light'].success + '20' }]}>
+                      <ThemedText style={[styles.statsText, { color: Colors[colorScheme ?? 'light'].success }]}>
+                        {item.stats.attendancePercentage}%
+                      </ThemedText>
+                    </View>
+                    <ThemedText style={[styles.statsText, { color: Colors[colorScheme ?? 'light'].textSecondary }]}>
+                      {item.stats.present}/{item.stats.totalClasses} Present
                     </ThemedText>
                   </View>
                 )}
               </View>
               <TouchableOpacity
-                style={styles.deleteButton}
+                style={[styles.deleteButton, { backgroundColor: Colors[colorScheme ?? 'light'].error }]}
                 onPress={() => handleDeleteStudent(item._id, item.name)}>
-                <ThemedText style={styles.deleteButtonText}>Delete</ThemedText>
+                <IconSymbol name="trash.fill" size={16} color="#fff" />
               </TouchableOpacity>
             </View>
           )}
@@ -277,108 +347,158 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   formContainer: {
-    backgroundColor: Colors.dark.cardBackground,
-    padding: 16,
-    borderRadius: 14,
-    marginBottom: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: '#007AFF',
+    padding: 20,
+    borderRadius: 20,
+    marginBottom: 20,
+    borderWidth: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 15,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 8,
+  },
+  formHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    gap: 12,
   },
   formTitle: {
-    fontSize: 16,
-    marginBottom: 12,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 13,
     fontWeight: '600',
+    marginBottom: 8,
+    opacity: 0.8,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    borderWidth: 2,
+    gap: 10,
+    height: 52,
   },
   input: {
-    borderWidth: 1,
-    borderColor: Colors.dark.text + '30',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-    fontSize: 14,
-    backgroundColor: Colors.dark.text + '10',
-    color: Colors.dark.text,
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500',
   },
   buttonRow: {
     flexDirection: 'row',
     gap: 12,
+    marginTop: 8,
   },
   button: {
     flex: 1,
-    padding: 12,
-    borderRadius: 8,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  gradientButton: {
+    flexDirection: 'row',
+    padding: 14,
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   cancelButton: {
-    backgroundColor: Colors.dark.text + '20',
-  },
-  createButton: {
-    backgroundColor: '#007AFF',
+    padding: 14,
+    alignItems: 'center',
+    borderRadius: 14,
   },
   buttonText: {
-    fontWeight: '600',
-    color: '#fff',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  addButtonWrapper: {
+    marginBottom: 20,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
   },
   addButton: {
-    backgroundColor: '#007AFF',
-    paddingVertical: 12,
-    borderRadius: 12,
+    flexDirection: 'row',
+    paddingVertical: 16,
     alignItems: 'center',
-    marginBottom: 16,
+    justifyContent: 'center',
+    gap: 10,
   },
   addButtonText: {
     color: '#fff',
-    fontWeight: '600',
+    fontWeight: '700',
+    fontSize: 16,
   },
   studentCard: {
     flexDirection: 'row',
-    backgroundColor: Colors.dark.cardBackground,
-    padding: 14,
-    borderRadius: 14,
-    marginBottom: 12,
+    padding: 16,
+    borderRadius: 18,
+    marginBottom: 14,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    borderLeftWidth: 4,
-    borderLeftColor: '#007AFF',
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
+  },
+  studentAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
   },
   studentInfo: {
     flex: 1,
   },
   studentName: {
-    fontSize: 15,
-    marginBottom: 4,
+    fontSize: 16,
+    marginBottom: 6,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 3,
   },
   studentDetail: {
-    fontSize: 12,
-    opacity: 0.6,
+    fontSize: 13,
+    opacity: 0.7,
   },
   statsRow: {
-    marginTop: 8,
-    paddingTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 10,
+    paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#ddd',
+  },
+  statBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   statsText: {
-    fontSize: 12,
-    color: '#007AFF',
-    marginVertical: 2,
-  },
-  deleteButton: {
-    backgroundColor: '#ff3b30',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  deleteButtonText: {
-    color: '#fff',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
   },
-  cardShadow: {
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+  deleteButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
   },
 });

@@ -1,0 +1,239 @@
+﻿app/(tabs)/_layout.tsx(67,9): error TS2353: Object literal may only specify known properties, and 'sceneContainerStyle' does not exist in type 'BottomTabNavigationOptions | ((props: { route: RouteProp<ParamListBase, string>; navigation: BottomTabNavigationProp<ParamListBase, string, undefined>; theme: Theme; }) => BottomTabNavigationOptions)'.
+app/(tabs)/_layout.tsx(153,37): error TS2820: Type '"calendar.fill"' is not assignable to type 'SFSymbols7_0'. Did you mean '"clear.fill"'?
+app/(tabs)/alerts.tsx(37,49): error TS2339: Property 'getConversations' does not exist on type '{ submitAbsenceReason: (data: { date: string; reason: string; reasonType?: string | undefined; attendanceId: string; }, token?: string | undefined) => Promise<any>; getAbsenceReasons: (studentId: string, params?: { ...; } | undefined, token?: string | undefined) => Promise<...>; ... 9 more ...; rejectOnDuty: (onDuty...'.
+app/(tabs)/alerts.tsx(50,49): error TS2339: Property 'getConversationMessages' does not exist on type '{ submitAbsenceReason: (data: { date: string; reason: string; reasonType?: string | undefined; attendanceId: string; }, token?: string | undefined) => Promise<any>; getAbsenceReasons: (studentId: string, params?: { ...; } | undefined, token?: string | undefined) => Promise<...>; ... 9 more ...; rejectOnDuty: (onDuty...'.
+app/(tabs)/alerts.tsx(68,36): error TS2339: Property 'sendMessage' does not exist on type '{ submitAbsenceReason: (data: { date: string; reason: string; reasonType?: string | undefined; attendanceId: string; }, token?: string | undefined) => Promise<any>; getAbsenceReasons: (studentId: string, params?: { ...; } | undefined, token?: string | undefined) => Promise<...>; ... 9 more ...; rejectOnDuty: (onDuty...'.
+app/(tabs)/interactions.tsx(146,51): error TS2339: Property 'cardTitle' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(148,29): error TS2339: Property 'formGroup' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(158,29): error TS2339: Property 'formGroup' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(168,29): error TS2339: Property 'formGroup' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(170,31): error TS2339: Property 'typeButtons' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(174,32): error TS2339: Property 'typeButton' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(174,83): error TS2339: Property 'typeButtonActive' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(176,44): error TS2339: Property 'typeButtonText' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(176,99): error TS2339: Property 'typeButtonTextActive' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(184,29): error TS2339: Property 'formGroup' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(187,42): error TS2339: Property 'textArea' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(301,40): error TS2551: Property 'eligibilityStatusText' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'. Did you mean 'eligibilityStatus'?
+app/(tabs)/interactions.tsx(308,31): error TS2551: Property 'eligibilityGrid' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'. Did you mean 'eligibilityCard'?
+app/(tabs)/interactions.tsx(309,33): error TS2551: Property 'eligibilityStat' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'. Did you mean 'eligibilityStatus'?
+app/(tabs)/interactions.tsx(310,41): error TS2339: Property 'eligibilityNumber' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(311,41): error TS2339: Property 'eligibilityLabel' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(313,33): error TS2551: Property 'eligibilityStat' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'. Did you mean 'eligibilityStatus'?
+app/(tabs)/interactions.tsx(314,41): error TS2339: Property 'eligibilityNumber' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(315,41): error TS2339: Property 'eligibilityLabel' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(317,33): error TS2551: Property 'eligibilityStat' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'. Did you mean 'eligibilityStatus'?
+app/(tabs)/interactions.tsx(318,41): error TS2339: Property 'eligibilityNumber' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(319,41): error TS2339: Property 'eligibilityLabel' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(321,33): error TS2551: Property 'eligibilityStat' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'. Did you mean 'eligibilityStatus'?
+app/(tabs)/interactions.tsx(322,41): error TS2339: Property 'eligibilityNumber' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(323,41): error TS2339: Property 'eligibilityLabel' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(327,37): error TS2551: Property 'eligibilityMessage' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'. Did you mean 'eligibilityHeader'?
+app/(tabs)/interactions.tsx(330,33): error TS2339: Property 'improvementTip' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(332,41): error TS2339: Property 'improvementText' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(345,51): error TS2339: Property 'cardTitle' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(347,29): error TS2339: Property 'formGroup' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(357,29): error TS2339: Property 'formGroup' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(367,29): error TS2339: Property 'formGroup' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(369,31): error TS2339: Property 'typeButtons' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(373,32): error TS2339: Property 'typeButton' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(373,83): error TS2339: Property 'typeButtonActive' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(375,44): error TS2339: Property 'typeButtonText' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(375,99): error TS2339: Property 'typeButtonTextActive' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(383,29): error TS2339: Property 'formGroup' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(393,29): error TS2339: Property 'formGroup' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/(tabs)/interactions.tsx(396,42): error TS2339: Property 'textArea' does not exist on type '{ container: { flex: number; }; header: { paddingHorizontal: number; paddingTop: number; paddingBottom: number; }; subtitle: { fontSize: number; opacity: number; marginTop: number; }; tabBar: { flexDirection: "row"; paddingHorizontal: number; paddingVertical: number; gap: number; }; ... 39 more ...; emptyText: { ......'.
+app/_layout.tsx(70,24): error TS2345: Argument of type '"/(tabs)/index"' is not assignable to parameter of type 'RelativePathString | ExternalPathString | "/admin-dashboard" | `/admin-dashboard?${string}` | `/admin-dashboard#${string}` | "/login" | `/login?${string}` | `/login#${string}` | "/modal" | `/modal?${string}` | ... 133 more ... | { ...; }'.
+app/admin/timetable.tsx(190,24): error TS2339: Property 'teacherId' does not exist on type '{ periodNumber: number; subject: string; startTime: string; endTime: string; room: string; isLab: boolean; }'.
+components/ui/icon-symbol.tsx(16,17): error TS2352: Conversion of type '{ 'house.fill': "home"; 'paperplane.fill': "send"; 'chevron.left.forwardslash.chevron.right': "code"; 'chevron.right': "chevron-right"; 'chevron.left': "chevron-left"; 'chevron.up': "expand-less"; ... 36 more ...; 'questionmark.circle': "help-outline"; }' to type 'IconMapping' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Type '{ 'house.fill': "home"; 'paperplane.fill': "send"; 'chevron.left.forwardslash.chevron.right': "code"; 'chevron.right': "chevron-right"; 'chevron.left': "chevron-left"; 'chevron.up': "expand-less"; ... 36 more ...; 'questionmark.circle': "help-outline"; }' is missing the following properties from type 'IconMapping': function, repeat, bold, link, and 9109 more.
+components/ui/icon-symbol.tsx(74,3): error TS1117: An object literal cannot have multiple properties with the same name.
+services/api.ts(56,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'undefined'.
+services/api.ts(65,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'undefined'.
+services/api.ts(75,7): error TS2322: Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'.
+services/api.ts(87,7): error TS2322: Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'.
+services/api.ts(99,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'undefined'.
+services/api.ts(119,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'undefined'.
+services/api.ts(128,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'undefined'.
+services/api.ts(137,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'undefined'.
+services/api.ts(147,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'undefined'.
+services/api.ts(164,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'undefined'.
+services/api.ts(181,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'undefined'.
+services/api.ts(198,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'undefined'.
+services/api.ts(213,7): error TS2322: Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'.
+services/api.ts(230,7): error TS2322: Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'.
+services/api.ts(242,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'undefined'.
+services/api.ts(251,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'undefined'.
+services/api.ts(260,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'undefined'.
+services/api.ts(269,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'undefined'.
+services/api.ts(299,7): error TS2322: Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'.
+services/api.ts(319,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'undefined'.
+services/api.ts(330,7): error TS2322: Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'.
+services/api.ts(342,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'undefined'.
+services/api.ts(361,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'undefined'.
+services/api.ts(371,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'undefined'.
+services/api.ts(388,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'undefined'.
+services/api.ts(398,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'undefined'.
+services/api.ts(409,7): error TS2322: Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'.
+services/api.ts(427,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'undefined'.
+services/api.ts(437,7): error TS2322: Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'.
+services/api.ts(449,7): error TS2322: Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'.
+services/api.ts(471,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'.
+      Property 'Authorization' is incompatible with index signature.
+        Type 'undefined' is not assignable to type 'string'.
+services/api.ts(486,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'.
+      Property 'Authorization' is incompatible with index signature.
+        Type 'undefined' is not assignable to type 'string'.
+services/api.ts(494,7): error TS2322: Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'.
+services/api.ts(506,7): error TS2322: Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'.
+services/api.ts(518,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'.
+      Property 'Authorization' is incompatible with index signature.
+        Type 'undefined' is not assignable to type 'string'.
+services/api.ts(526,7): error TS2322: Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'.
+services/api.ts(544,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'.
+      Property 'Authorization' is incompatible with index signature.
+        Type 'undefined' is not assignable to type 'string'.
+services/api.ts(552,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'.
+      Property 'Authorization' is incompatible with index signature.
+        Type 'undefined' is not assignable to type 'string'.
+services/api.ts(559,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'.
+      Property 'Authorization' is incompatible with index signature.
+        Type 'undefined' is not assignable to type 'string'.
+services/api.ts(582,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'.
+      Property 'Authorization' is incompatible with index signature.
+        Type 'undefined' is not assignable to type 'string'.
+services/api.ts(589,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'.
+      Property 'Authorization' is incompatible with index signature.
+        Type 'undefined' is not assignable to type 'string'.
+services/api.ts(597,7): error TS2322: Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'.
+services/api.ts(609,7): error TS2322: Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'.
+services/api.ts(621,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'.
+      Property 'Authorization' is incompatible with index signature.
+        Type 'undefined' is not assignable to type 'string'.
+services/api.ts(636,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'.
+      Property 'Authorization' is incompatible with index signature.
+        Type 'undefined' is not assignable to type 'string'.
+services/api.ts(644,7): error TS2322: Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'.
+services/api.ts(656,7): error TS2322: Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'.
+services/api.ts(668,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'.
+      Property 'Authorization' is incompatible with index signature.
+        Type 'undefined' is not assignable to type 'string'.
+services/api.ts(683,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'.
+      Property 'Authorization' is incompatible with index signature.
+        Type 'undefined' is not assignable to type 'string'.
+services/api.ts(690,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'.
+      Property 'Authorization' is incompatible with index signature.
+        Type 'undefined' is not assignable to type 'string'.
+services/api.ts(698,7): error TS2322: Type '{ Authorization: string; 'Content-Type': string; } | { Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; 'Content-Type': string; }' is not assignable to type 'undefined'.
+services/api.ts(709,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'.
+      Property 'Authorization' is incompatible with index signature.
+        Type 'undefined' is not assignable to type 'string'.
+services/api.ts(716,7): error TS2322: Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+  Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+    Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'.
+      Property 'Authorization' is incompatible with index signature.
+        Type 'undefined' is not assignable to type 'string'.

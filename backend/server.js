@@ -9,6 +9,8 @@ require('dotenv').config();
 
 const connectDB = require('./config/database');
 const swaggerSpec = require('./config/swagger');
+const MotionPatternAnalyzer = require('./utils/motionPatternAnalyzer');
+const wss = require('./mqttReceiver'); // WebSocket server for ESP32
 const studentRoutes = require('./routes/students');
 const attendanceRoutes = require('./routes/attendance');
 const attendanceV2Routes = require('./routes/attendanceV2');
@@ -52,7 +54,7 @@ app.use('/api/student-interactions', studentInteractionsRoutes);
 app.use('/api/teachers', teacherRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/student-management', studentManagementRoutes);
-
+app.set('trust proxy', 1);
 // Health
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', uptime: process.uptime(), timestamp: Date.now() });
@@ -87,38 +89,41 @@ app.get('/', (req, res) => {
   });
 });
 
+// Motion data is now received via WebSocket (ws://localhost:8080)
+// See mqttReceiver.js — the ESP32 connects directly over WebSocket.
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   // Log error in development only
   if (process.env.NODE_ENV === 'development') {
     console.error(err.stack);
   }
-  
+
   // Handle different error types
   if (err.name === 'ValidationError') {
     const messages = Object.values(err.errors).map(e => e.message);
     return res.status(400).json({ message: messages.join(', ') });
   }
-  
+
   if (err.code === 11000) {
     return res.status(400).json({ message: 'Duplicate entry' });
   }
-  
+
   if (err.name === 'CastError') {
     return res.status(400).json({ message: 'Invalid ID format' });
   }
-  
+
   if (err.name === 'JsonWebTokenError') {
     return res.status(401).json({ message: 'Invalid token' });
   }
-  
+
   if (err.name === 'TokenExpiredError') {
     return res.status(401).json({ message: 'Token expired' });
   }
-  
+
   // Default error
-  res.status(err.statusCode || 500).json({ 
-    message: err.message || 'Something went wrong!' 
+  res.status(err.statusCode || 500).json({
+    message: err.message || 'Something went wrong!'
   });
 });
 
@@ -131,6 +136,7 @@ app.use((req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📚 API Documentation: http://localhost:${PORT}/api/docs`);
+  console.log(`🌐 WebSocket server running on ws://localhost:8080 (ESP32 motion data)`);
 });
 
 module.exports = app;

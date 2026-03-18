@@ -1,5 +1,5 @@
-import { StyleSheet, View, TouchableOpacity, ScrollView, Alert, Platform } from 'react-native';
-import { useEffect } from 'react';
+import { StyleSheet, View, TouchableOpacity, ScrollView, Alert, Platform, Switch } from 'react-native';
+import { useEffect, useState } from 'react';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/context/AuthContext';
@@ -11,7 +11,13 @@ import CommonHeader from '@/components/CommonHeader';
 
 export default function ProfileScreen() {
   const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme ?? 'light'];
   const { user, logout } = useAuth();
+  const [showSettings, setShowSettings] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [emailNotifications, setEmailNotifications] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [vibrationEnabled, setVibrationEnabled] = useState(true);
 
   useEffect(() => {
     console.log('ProfileScreen mounted');
@@ -64,93 +70,135 @@ export default function ProfileScreen() {
     }
   };
 
+  const SettingRow = ({
+    icon,
+    label,
+    value,
+    onPress,
+    rightElement,
+  }: {
+    icon: string;
+    label: string;
+    value?: string;
+    onPress?: () => void;
+    rightElement?: React.ReactNode;
+  }) => (
+    <TouchableOpacity
+      style={[
+        styles.settingRow,
+        { borderBottomColor: colors.border, backgroundColor: colors.cardBackground },
+      ]}
+      onPress={onPress}
+      activeOpacity={0.6}
+      disabled={!onPress && !rightElement}>
+      <View style={styles.settingLeft}>
+        <View
+          style={[
+            styles.iconContainer,
+            { backgroundColor: colors.tint + '20' },
+          ]}>
+          <IconSymbol name={icon as any} size={20} color={colors.tint} />
+        </View>
+        <View style={styles.settingContent}>
+          <ThemedText style={styles.settingLabel}>{label}</ThemedText>
+          {value && <ThemedText style={styles.settingValue}>{value}</ThemedText>}
+        </View>
+      </View>
+      {rightElement ? (
+        rightElement
+      ) : (
+        <IconSymbol name="chevron.right" size={18} color="#94a3b8" />
+      )}
+    </TouchableOpacity>
+  );
+
   return (
     <ThemedView style={styles.container}>
       <CommonHeader title="My Profile" />
 
-      {/* Profile Info Card */}
       <ScrollView 
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}>
         
+        {/* Profile Card */}
         <ThemedView style={[styles.profileCard, { marginHorizontal: 16 }]}>
-          <View style={styles.avatarContainer}>
-            <View style={[styles.avatar, { backgroundColor: Colors[colorScheme ?? 'light'].tint }]}>
-              <ThemedText style={styles.avatarInitial}>
-                {user?.name?.charAt(0).toUpperCase()}
+              <View style={styles.avatarContainer}>
+                <View style={[styles.avatar, { backgroundColor: Colors[colorScheme ?? 'light'].tint }]}>
+                  <ThemedText style={styles.avatarInitial}>
+                    {user?.name?.charAt(0).toUpperCase()}
+                  </ThemedText>
+                </View>
+              </View>
+
+              <ThemedText type="defaultSemiBold" style={styles.userName}>
+                {user?.name}
               </ThemedText>
-            </View>
-          </View>
-
-          <ThemedText type="defaultSemiBold" style={styles.userName}>
-            {user?.name}
-          </ThemedText>
-          <ThemedText style={styles.userEmail}>
-            {user?.email}
-          </ThemedText>
-
-          <View style={[styles.roleBadge, { backgroundColor: getRoleBadgeColor(user?.role || '') }]}>
-            <ThemedText style={styles.roleText}>
-              {user?.role?.toUpperCase()}
-            </ThemedText>
-          </View>
-        </ThemedView>
-
-        {/* Account Information */}
-        <ThemedText type="subtitle" style={styles.sectionTitle}>
-          Account Information
-        </ThemedText>
-
-        <View style={[styles.infoCard, { marginHorizontal: 16 }]}>
-          <View style={styles.infoRow}>
-            <IconSymbol name="envelope.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
-            <View style={styles.infoContent}>
-              <ThemedText style={styles.infoLabel}>Email</ThemedText>
-              <ThemedText style={styles.infoValue}>{user?.email}</ThemedText>
-            </View>
-          </View>
-
-          <View style={[styles.infoRow, styles.infoRowBorder]}>
-            <IconSymbol name="person.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
-            <View style={styles.infoContent}>
-              <ThemedText style={styles.infoLabel}>Role</ThemedText>
-              <ThemedText style={styles.infoValue}>
-                {user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'N/A'}
+              <ThemedText style={styles.userEmail}>
+                {user?.email}
               </ThemedText>
-            </View>
-          </View>
 
-          {user?.lastLogin && (
-            <View style={styles.infoRow}>
-              <IconSymbol name="clock.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
-              <View style={styles.infoContent}>
-                <ThemedText style={styles.infoLabel}>Last Login</ThemedText>
-                <ThemedText style={styles.infoValue}>
-                  {new Date(user.lastLogin).toLocaleString()}
+              <View style={[styles.roleBadge, { backgroundColor: getRoleBadgeColor(user?.role || '') }]}>
+                <ThemedText style={styles.roleText}>
+                  {user?.role?.toUpperCase()}
                 </ThemedText>
               </View>
+            </ThemedView>
+
+            {/* Account Information */}
+            <ThemedText type="subtitle" style={styles.sectionTitle}>
+              Account Information
+            </ThemedText>
+
+            <View style={[styles.infoCard, { marginHorizontal: 16 }]}>
+              <View style={styles.infoRow}>
+                <IconSymbol name="envelope.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
+                <View style={styles.infoContent}>
+                  <ThemedText style={styles.infoLabel}>Email</ThemedText>
+                  <ThemedText style={styles.infoValue}>{user?.email}</ThemedText>
+                </View>
+              </View>
+
+              <View style={[styles.infoRow, styles.infoRowBorder]}>
+                <IconSymbol name="person.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
+                <View style={styles.infoContent}>
+                  <ThemedText style={styles.infoLabel}>Role</ThemedText>
+                  <ThemedText style={styles.infoValue}>
+                    {user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'N/A'}
+                  </ThemedText>
+                </View>
+              </View>
+
+              {user?.lastLogin && (
+                <View style={styles.infoRow}>
+                  <IconSymbol name="clock.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
+                  <View style={styles.infoContent}>
+                    <ThemedText style={styles.infoLabel}>Last Login</ThemedText>
+                    <ThemedText style={styles.infoValue}>
+                      {new Date(user.lastLogin).toLocaleString()}
+                    </ThemedText>
+                  </View>
+                </View>
+              )}
             </View>
-          )}
-        </View>
 
-        {/* Logout Button */}
-        <TouchableOpacity
-          style={[styles.logoutButton, { marginHorizontal: 16 }]}
-          onPress={() => {
-            console.log('LOGOUT BUTTON ONPRESS TRIGGERED');
-            handleLogout();
-          }}
-          activeOpacity={0.85}>
-          <IconSymbol name="arrow.right.square.fill" size={18} color="#fff" />
-          <ThemedText style={styles.logoutText}>Logout</ThemedText>
-        </TouchableOpacity>
+            {/* Logout Button */}
+            <TouchableOpacity
+              style={[styles.logoutButton, { marginHorizontal: 16, marginTop: 24 }]}
+              onPress={() => {
+                console.log('LOGOUT BUTTON ONPRESS TRIGGERED');
+                handleLogout();
+              }}
+              activeOpacity={0.85}>
+              <IconSymbol name="arrow.right.square.fill" size={18} color="#fff" />
+              <ThemedText style={styles.logoutText}>Logout</ThemedText>
+            </TouchableOpacity>
 
-        <View style={styles.footer}>
-          <ThemedText style={styles.footerText}>
-            Attendance Management System v1.0
-          </ThemedText>
-        </View>
+            <View style={styles.footer}>
+              <ThemedText style={styles.footerText}>
+                Attendance Management System v1.0
+              </ThemedText>
+            </View>
       </ScrollView>
     </ThemedView>
   );
@@ -160,47 +208,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 10,
-  },
-  compactHeader: {
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 14,
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
-  },
-  compactHeaderContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  headerIconLeft: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: 'rgba(128, 128, 128, 0.08)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerIconRight: {
-    opacity: 0.5,
-  },
-  headerTitle: {
-    marginBottom: 2,
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    opacity: 0.6,
-  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingTop: 8,
-    paddingBottom: 20,
+    paddingBottom: 40,
   },
   profileCard: {
     paddingVertical: 20,
@@ -305,6 +317,40 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
   },
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginHorizontal: 16,
+    borderBottomWidth: 1,
+  },
+  settingLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  iconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  settingContent: {
+    flex: 1,
+  },
+  settingLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  settingValue: {
+    fontSize: 13,
+    opacity: 0.6,
+  },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -322,6 +368,9 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  logoutContainer: {
+    paddingTop: 24,
+  },
   logoutText: {
     color: '#fff',
     fontSize: 15,
@@ -334,5 +383,32 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 12,
     opacity: 0.5,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+  },
+  actionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  actionIconContainer: {
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionLabel: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  expandedSettings: {
+    paddingTop: 4,
   },
 });

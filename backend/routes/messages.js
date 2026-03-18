@@ -16,7 +16,7 @@ const Notification = require('../models/Notification');
 // @route   GET /api/messages/:userId/conversations
 // @desc    Get all conversations for a user
 // @access  Private (Self or Admin)
-router.get('/:userId/conversations', requireAuth, requireSelfOrRoles({ roles: ['super_admin', 'admin'] }), asyncHandler(async (req, res) => {
+router.get('/:userId/conversations', requireAuth, requireSelfOrRoles({ studentParam: 'userId', roles: ['super_admin', 'admin'] }), asyncHandler(async (req, res) => {
   const { page = 1, limit = 20 } = req.query;
 
   const conversations = await Conversation.find({

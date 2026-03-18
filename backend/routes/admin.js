@@ -1280,9 +1280,18 @@ router.post('/timetables',
     try {
       const { classId, section, dayOfWeek, periods, effectiveFrom, effectiveTo } = req.body;
 
+      console.log('Creating timetable:', { classId, section, dayOfWeek, periodsCount: periods.length });
+
       // Check if timetable already exists for this class, section, and day
-      const existing = await Timetable.findOne({ classId, section, dayOfWeek, isActive: true });
+      const existing = await Timetable.findOne({ 
+        classId, 
+        section: section || null, 
+        dayOfWeek, 
+        isActive: true 
+      });
+      
       if (existing) {
+        console.log('Duplicate timetable found:', existing._id);
         return res.status(400).json({
           success: false,
           message: 'Active timetable already exists for this class, section, and day'
@@ -1291,7 +1300,7 @@ router.post('/timetables',
 
       const timetable = new Timetable({
         classId,
-        section,
+        section: section || null,
         dayOfWeek,
         periods,
         effectiveFrom: effectiveFrom ? new Date(effectiveFrom) : new Date(),
@@ -1304,12 +1313,15 @@ router.post('/timetables',
       await savedTimetable.populate('classId', 'name semester');
       await savedTimetable.populate('periods.teacherId', 'name email');
 
+      console.log('Timetable created successfully:', savedTimetable._id);
+
       res.status(201).json({
         success: true,
         message: 'Timetable created successfully',
         data: savedTimetable
       });
     } catch (error) {
+      console.error('Timetable creation error:', error);
       res.status(400).json({ success: false, message: error.message });
     }
   }

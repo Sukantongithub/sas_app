@@ -93,7 +93,7 @@ export const authAPI = {
       console.warn('No token available for logout');
       return { message: 'No token to logout', success: true };
     }
-    
+
     // With JWT, just verify token is valid before client removes it
     try {
       const response = await fetchWithTimeout(`${API_BASE_URL}/auth/logout`, {
@@ -117,6 +117,23 @@ export const authAPI = {
       headers: {
         'Authorization': `Bearer ${token}`,
       },
+    });
+    return handleResponse(response);
+  },
+
+  changePassword: async (
+    currentPassword: string,
+    newPassword: string,
+    confirmPassword: string,
+    token: string
+  ) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/auth/change-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),
     });
     return handleResponse(response);
   },

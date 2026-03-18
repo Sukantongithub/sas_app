@@ -11,12 +11,14 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   register: (userData: any) => Promise<void>;
+  resetNavigation: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const TOKEN_KEY = '@attendance_token';
 const USER_KEY = '@attendance_user';
+const NAVIGATION_KEY = '@attendance_last_navigation';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -41,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('AuthContext.loadSession: Calling verify API');
         const response = await authAPI.verify(savedToken);
         console.log('AuthContext.loadSession: Verify response:', response);
-        
+
         if (response.valid) {
           console.log('AuthContext.loadSession: Token valid, setting state');
           setToken(savedToken);
@@ -87,14 +89,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true);
       const response = await authAPI.login(email, password);
-      
+
       setToken(response.token);
       setUser(response.user);
       await saveSession(response.token, response.user);
+      // Reset navigation state on login to start at first page
+      await resetNavigation();
     } catch (error: any) {
       throw new Error(error.message || 'Login failed');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const resetNavigation = async () => {
+    try {
+      await AsyncStorage.removeItem(NAVIGATION_KEY);
+    } catch (error) {
+      console.error('Error resetting navigation:', error);
     }
   };
 
@@ -103,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log('LOGOUT FUNCTION CALLED');
     console.log('========================================');
     console.log('Current state - user:', user?.email, 'token exists:', !!token);
-    
+
     try {
       // Capture token before clearing state
       const currentToken = token;
@@ -171,6 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         register,
+        resetNavigation,
       }}>
       {children}
     </AuthContext.Provider>

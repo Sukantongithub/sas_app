@@ -56,7 +56,7 @@ export default function StudentAttendanceScreen() {
   const [activeTab, setActiveTab] = useState<'daily' | 'subject' | 'monthly' | 'time'>('daily');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  
+
   // Data states
   const [dailyData, setDailyData] = useState<{ records: DailyRecord[]; summary: any } | null>(null);
   const [subjectData, setSubjectData] = useState<{ subjectWise: SubjectStats[]; records: any[] } | null>(null);
@@ -76,7 +76,7 @@ export default function StudentAttendanceScreen() {
 
   const fetchData = async () => {
     if (!studentId || !token) return;
-    
+
     setLoading(true);
     try {
       switch (activeTab) {
@@ -256,7 +256,7 @@ export default function StudentAttendanceScreen() {
             <View style={styles.progressBar}>
               <View style={[
                 styles.progressFill,
-                { 
+                {
                   width: `${subject.percentage}%`,
                   backgroundColor: subject.percentage >= 75 ? '#4CAF50' : '#F44336'
                 }
@@ -434,10 +434,10 @@ export default function StudentAttendanceScreen() {
         <TouchableOpacity
           style={[styles.tabItem, activeTab === 'daily' && styles.activeTab]}
           onPress={() => setActiveTab('daily')}>
-          <IconSymbol 
-            name="calendar" 
-            size={18} 
-            color={activeTab === 'daily' ? '#fff' : Colors[colorScheme ?? 'light'].text} 
+          <IconSymbol
+            name="calendar"
+            size={18}
+            color={activeTab === 'daily' ? '#fff' : Colors[colorScheme ?? 'light'].text}
           />
           <ThemedText style={[styles.tabLabel, activeTab === 'daily' && styles.activeTabLabel]}>Daily</ThemedText>
         </TouchableOpacity>
@@ -445,10 +445,10 @@ export default function StudentAttendanceScreen() {
         <TouchableOpacity
           style={[styles.tabItem, activeTab === 'subject' && styles.activeTab]}
           onPress={() => setActiveTab('subject')}>
-          <IconSymbol 
-            name="book.fill" 
-            size={18} 
-            color={activeTab === 'subject' ? '#fff' : Colors[colorScheme ?? 'light'].text} 
+          <IconSymbol
+            name="book.fill"
+            size={18}
+            color={activeTab === 'subject' ? '#fff' : Colors[colorScheme ?? 'light'].text}
           />
           <ThemedText style={[styles.tabLabel, activeTab === 'subject' && styles.activeTabLabel]}>Subject</ThemedText>
         </TouchableOpacity>
@@ -456,10 +456,10 @@ export default function StudentAttendanceScreen() {
         <TouchableOpacity
           style={[styles.tabItem, activeTab === 'monthly' && styles.activeTab]}
           onPress={() => setActiveTab('monthly')}>
-          <IconSymbol 
-            name="chart.bar.fill" 
-            size={18} 
-            color={activeTab === 'monthly' ? '#fff' : Colors[colorScheme ?? 'light'].text} 
+          <IconSymbol
+            name="chart.bar.fill"
+            size={18}
+            color={activeTab === 'monthly' ? '#fff' : Colors[colorScheme ?? 'light'].text}
           />
           <ThemedText style={[styles.tabLabel, activeTab === 'monthly' && styles.activeTabLabel]}>Month</ThemedText>
         </TouchableOpacity>
@@ -467,10 +467,10 @@ export default function StudentAttendanceScreen() {
         <TouchableOpacity
           style={[styles.tabItem, activeTab === 'time' && styles.activeTab]}
           onPress={() => setActiveTab('time')}>
-          <IconSymbol 
-            name="clock.fill" 
-            size={18} 
-            color={activeTab === 'time' ? '#fff' : Colors[colorScheme ?? 'light'].text} 
+          <IconSymbol
+            name="clock.fill"
+            size={18}
+            color={activeTab === 'time' ? '#fff' : Colors[colorScheme ?? 'light'].text}
           />
           <ThemedText style={[styles.tabLabel, activeTab === 'time' && styles.activeTabLabel]}>Time</ThemedText>
         </TouchableOpacity>
@@ -486,8 +486,8 @@ export default function StudentAttendanceScreen() {
           keyExtractor={(item, index) => item._id || index.toString()}
           contentContainerStyle={styles.listContent}
           refreshControl={
-            <RefreshControl 
-              refreshing={refreshing} 
+            <RefreshControl
+              refreshing={refreshing}
               onRefresh={onRefresh}
               tintColor={Colors[colorScheme ?? 'light'].tint}
             />
@@ -525,7 +525,7 @@ export default function StudentAttendanceScreen() {
                   <View style={styles.progressBar}>
                     <View style={[
                       styles.progressFill,
-                      { 
+                      {
                         width: `${item.percentage}%`,
                         backgroundColor: item.percentage >= 75 ? '#4CAF50' : '#F44336'
                       }
@@ -699,7 +699,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   activeTab: {
-    backgroundColor: '#007AFF',
+    backgroundColor: Colors.light.tint,
   },
   tabLabel: {
     fontSize: 11,
@@ -877,5 +877,79 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     opacity: 0.6,
+  },
+  // ── Missing styles that were referenced but never defined ─────────────────
+  summaryCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: 'rgba(128,128,128,0.06)',
+  },
+  summaryGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 12,
+  },
+  summaryItem: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  summaryNumber: {
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  summaryLabel: {
+    fontSize: 11,
+    opacity: 0.6,
+    fontWeight: '500',
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    paddingHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  monthlyCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 20,
+    borderRadius: 16,
+    backgroundColor: 'rgba(128,128,128,0.06)',
+    alignItems: 'center',
+  },
+  monthlyCircle: {
+    marginVertical: 16,
+    alignItems: 'center',
+  },
+  monthlyPercentage: {
+    fontSize: 48,
+    fontWeight: '800',
+    letterSpacing: -1,
+  },
+  monthlyLabel: {
+    fontSize: 13,
+    opacity: 0.6,
+    fontWeight: '500',
+  },
+  monthlyStats: {
+    flexDirection: 'row',
+    gap: 24,
+    marginTop: 4,
+  },
+  monthlyStatItem: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  monthlyStatNumber: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  monthlyStatLabel: {
+    fontSize: 11,
+    opacity: 0.6,
+    fontWeight: '500',
   },
 });

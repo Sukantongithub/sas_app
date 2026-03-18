@@ -1,7 +1,7 @@
-// Force the app to use dark theme across the experience
-import { useColorScheme as useRNColorScheme } from 'react-native';
+// Use theme from ThemeContext
+import { useTheme } from '@/context/ThemeContext';
 
 export function useColorScheme() {
-	// Always prefer dark; fallback to React Native scheme if needed later
-	return 'dark' as ReturnType<typeof useRNColorScheme>;
+	const { colorScheme } = useTheme();
+	return colorScheme;
 }

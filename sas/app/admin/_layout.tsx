@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useRouter, usePathname } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { ThemedView } from '@/components/themed-view';
@@ -15,6 +16,7 @@ export default function AdminLayout() {
   const pathname = usePathname();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const insets = useSafeAreaInsets();
 
   // Redirect if not admin
   if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
@@ -58,8 +60,9 @@ export default function AdminLayout() {
       <View style={[
         styles.navBar, 
         { 
-          backgroundColor: colorScheme === 'dark' ? 'rgba(28, 28, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-          borderTopColor: colorScheme === 'dark' ? 'rgba(84, 84, 88, 0.65)' : 'rgba(0, 0, 0, 0.1)',
+          backgroundColor: colors.navBarBackground,
+          borderTopColor: colors.navBarBorder,
+          paddingBottom: Math.max(insets.bottom, Platform.OS === 'ios' ? 12 : 8),
         }
       ]}>
         {adminSections.map((section) => {
@@ -74,7 +77,7 @@ export default function AdminLayout() {
                 <IconSymbol
                   size={26}
                   name={section.icon as any}
-                  color={active ? colors.tint : colorScheme === 'dark' ? '#8E8E93' : '#8E8E93'}
+                  color={active ? colors.tint : colors.textSecondary}
                   weight="medium"
                 />
               </View>
@@ -82,7 +85,7 @@ export default function AdminLayout() {
                 style={[
                   styles.navLabel,
                   { 
-                    color: active ? colors.tint : colorScheme === 'dark' ? '#8E8E93' : '#8E8E93',
+                    color: active ? colors.tint : colors.textSecondary,
                     fontWeight: active ? '600' : '500',
                   },
                 ]}>
