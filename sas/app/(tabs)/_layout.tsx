@@ -16,10 +16,12 @@ type TabRoute =
   | 'index'
   | 'explore'
   | 'student-attendance'
+  | 'parent-attendance'
   | 'interactions'
   | 'timetable'
   | 'alerts'
   | 'profile'
+  | 'parent-profile'
   | 'admin'
   | 'history';
 
@@ -31,10 +33,12 @@ const TAB_DEFINITIONS: Array<{ route: TabRoute; title: string; icon: string }> =
   { route: 'index', title: 'Dashboard', icon: 'house.fill' },
   { route: 'explore', title: 'Mark Attend.', icon: 'checkmark.circle.fill' },
   { route: 'student-attendance', title: 'Attendance', icon: 'chart.bar.fill' },
+  { route: 'parent-attendance', title: "Son's Attendance", icon: 'chart.bar.fill' },
   { route: 'interactions', title: 'Requests', icon: 'tray.and.arrow.down.fill' },
   { route: 'timetable', title: 'Timetable', icon: 'calendar.fill' },
   { route: 'alerts', title: 'Messages', icon: 'bubble.left.and.bubble.right.fill' },
   { route: 'profile', title: 'Profile', icon: 'person.circle.fill' },
+  { route: 'parent-profile', title: 'Profile', icon: 'person.circle.fill' },
   { route: 'admin', title: 'Admin', icon: 'lock.shield.fill' },
   { route: 'history', title: 'History', icon: 'clock.fill' },
 ];

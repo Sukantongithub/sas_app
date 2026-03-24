@@ -84,10 +84,12 @@ router.post('/login',
   async (req, res) => {
     try {
       const { email, password } = req.body;
+      console.log('[LOGIN DEBUG] email:', JSON.stringify(email), '| passwordLength:', password?.length);
 
       // Find user
-      const user = await User.findOne({ email }).populate('studentId');
+      const user = await User.findOne({ email: email.toLowerCase().trim() }).populate('studentId');
       if (!user) {
+        console.log('[LOGIN DEBUG] No user found for email:', email);
         return res.status(401).json({ message: 'Invalid email or password' });
       }
 
@@ -98,6 +100,7 @@ router.post('/login',
 
       // Verify password
       const isMatch = await user.comparePassword(password);
+      console.log('[LOGIN DEBUG] passwordMatch:', isMatch, '| role:', user.role);
 
       if (!isMatch) {
         return res.status(401).json({ message: 'Invalid email or password' });

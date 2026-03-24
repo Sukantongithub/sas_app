@@ -8,7 +8,9 @@ import {
   Alert,
   ActivityIndicator,
   FlatList,
+  Modal,
 } from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -42,13 +44,21 @@ export default function StudentsManagementScreen() {
   const { token, user } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
+  const [importLoading, setImportLoading] = useState(false);
+  const [showFormatModal, setShowFormatModal] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [importMessage, setImportMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     rollNumber: '',
     email: '',
     class: '',
   });
+
+  const showImportBanner = (type: 'success' | 'error', text: string) => {
+    setImportMessage({ type, text });
+    setTimeout(() => setImportMessage(null), 4000);
+  };
 
   useEffect(() => {
     fetchStudents();
@@ -128,6 +138,93 @@ export default function StudentsManagementScreen() {
     );
   };
 
+  const handleBulkImportStudents = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'application/vnd.ms-excel',
+          'text/csv',
+          '*/*',
+        ],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+
+      console.log('DocumentPicker result:', JSON.stringify(result));
+
+      if (result.canceled || !result.assets?.length) {
+        console.log('File pick cancelled or no assets');
+        return;
+      }
+
+      const file = result.assets[0];
+      console.log('Selected file:', file.name, file.mimeType, file.uri);
+
+      setImportLoading(true);
+
+      const formData = new FormData();
+
+      // On Expo Web the asset has a native File object (.file property).
+      // On native (iOS/Android) we use the URI object approach.
+      if (file.file) {
+        // Web platform — use the real File object directly
+        formData.append('file', file.file);
+      } else {
+        // Native platform — use URI object
+        formData.append('file', {
+          uri: file.uri,
+          name: file.name || 'students.xlsx',
+          type: file.mimeType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        } as any);
+      }
+
+      console.log('Sending import request to:', `${API_BASE_URL}/admin/students/import`);
+
+      const response = await fetch(`${API_BASE_URL}/admin/students/import`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          // Do NOT set Content-Type manually — let fetch set multipart/form-data with boundary
+        },
+        body: formData,
+      });
+
+      console.log('Import response status:', response.status);
+      const payload = await response.json();
+      console.log('Import payload:', JSON.stringify(payload));
+
+      if (!response.ok) {
+        throw new Error(payload.message || 'Failed to import students');
+      }
+
+      const summary = payload?.data;
+      const created = summary?.created ?? 0;
+      const skipped = summary?.skipped ?? 0;
+      if (created > 0) {
+        showImportBanner(
+          'success',
+          `✅ ${created} student${created > 1 ? 's' : ''} created successfully!${
+            skipped > 0 ? ` (${skipped} skipped)` : ''
+          } Default password = Roll Number.`
+        );
+      } else {
+        showImportBanner('error', `No students created. ${skipped} row(s) skipped (already exist).`);
+      }
+
+      await fetchStudents();
+    } catch (error: any) {
+      console.error('Import error:', error);
+      showImportBanner('error', error.message || 'Unable to import students file');
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const showImportFormatInfo = () => {
+    setShowFormatModal(true);
+  };
+
   if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
     return (
       <ThemedView style={styles.container}>
@@ -155,6 +252,15 @@ export default function StudentsManagementScreen() {
         <View style={styles.header}>
           <ThemedText style={styles.subtitle}>Total: {students.length}</ThemedText>
         </View>
+
+        {importMessage && (
+          <View style={[
+            styles.importBanner,
+            { backgroundColor: importMessage.type === 'success' ? '#1a7a4a' : '#b5361e' }
+          ]}>
+            <ThemedText style={styles.importBannerText}>{importMessage.text}</ThemedText>
+          </View>
+        )}
 
         {showForm && (
           <View style={[styles.formContainer, { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground, borderColor: Colors[colorScheme ?? 'light'].tint }]}>
@@ -256,19 +362,53 @@ export default function StudentsManagementScreen() {
         )}
 
         {!showForm && (
-          <TouchableOpacity style={styles.addButtonWrapper} onPress={() => {
-            setFormData({ name: '', rollNumber: '', email: '', class: '' });
-            setShowForm(true);
-          }}>
-            <LinearGradient
-              colors={[Colors[colorScheme ?? 'light'].gradientStart, Colors[colorScheme ?? 'light'].gradientEnd]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.addButton}>
-              <IconSymbol name="plus.circle.fill" size={22} color="#fff" />
-              <ThemedText style={styles.addButtonText}>Add New Student</ThemedText>
-            </LinearGradient>
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity style={styles.addButtonWrapper} onPress={() => {
+              setFormData({ name: '', rollNumber: '', email: '', class: '' });
+              setShowForm(true);
+            }}>
+              <LinearGradient
+                colors={[Colors[colorScheme ?? 'light'].gradientStart, Colors[colorScheme ?? 'light'].gradientEnd]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.addButton}>
+                <IconSymbol name="plus.circle.fill" size={22} color="#fff" />
+                <ThemedText style={styles.addButtonText}>Add New Student</ThemedText>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <View style={[styles.importCard, { borderColor: Colors[colorScheme ?? 'light'].border, backgroundColor: Colors[colorScheme ?? 'light'].cardBackground }]}>
+              <View style={styles.importRow}>
+                <TouchableOpacity
+                  style={[styles.importButton, { borderColor: Colors[colorScheme ?? 'light'].tint, backgroundColor: Colors[colorScheme ?? 'light'].cardBackground }]}
+                  onPress={handleBulkImportStudents}
+                  disabled={importLoading}>
+                  {importLoading ? (
+                    <ActivityIndicator size="small" color={Colors[colorScheme ?? 'light'].tint} />
+                  ) : (
+                    <View style={styles.importButtonContent}>
+                      <View style={[styles.uploadIconWrap, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '20' }]}>
+                        <ThemedText style={[styles.uploadSymbol, { color: Colors[colorScheme ?? 'light'].tint }]}>U</ThemedText>
+                      </View>
+                      <View style={styles.importTextGroup}>
+                        <ThemedText style={[styles.importButtonText, { color: Colors[colorScheme ?? 'light'].tint }]}>Upload Excel/CSV</ThemedText>
+                        <ThemedText style={[styles.importSubText, { color: Colors[colorScheme ?? 'light'].textSecondary }]}>Tap info icon for format</ThemedText>
+                      </View>
+                    </View>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.infoButton, { borderColor: Colors[colorScheme ?? 'light'].tint, backgroundColor: Colors[colorScheme ?? 'light'].cardBackground }]}
+                  onPress={showImportFormatInfo}
+                  activeOpacity={0.8}>
+                  <ThemedText style={[styles.infoSymbol, { color: Colors[colorScheme ?? 'light'].tint }]}>i</ThemedText>
+                </TouchableOpacity>
+              </View>
+
+              <ThemedText style={[styles.importHint, { color: Colors[colorScheme ?? 'light'].textSecondary }]}>File must contain exactly these columns in order: Full Name, Roll Number, Email, Class.</ThemedText>
+            </View>
+          </>
         )}
 
         <FlatList
@@ -318,6 +458,39 @@ export default function StudentsManagementScreen() {
           )}
         />
       </ScrollView>
+
+      <Modal
+        visible={showFormatModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowFormatModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground, borderColor: Colors[colorScheme ?? 'light'].border }]}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalTitleRow}>
+                <View style={[styles.modalInfoBadge, { borderColor: Colors[colorScheme ?? 'light'].tint + '55' }]}>
+                  <ThemedText style={[styles.modalInfoBadgeText, { color: Colors[colorScheme ?? 'light'].tint }]}>i</ThemedText>
+                </View>
+                <ThemedText type="defaultSemiBold" style={styles.modalTitle}>Excel Format (Required)</ThemedText>
+              </View>
+              <TouchableOpacity onPress={() => setShowFormatModal(false)}>
+                <IconSymbol name="xmark.circle.fill" size={22} color={Colors[colorScheme ?? 'light'].textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ThemedText style={[styles.modalText, { color: Colors[colorScheme ?? 'light'].textSecondary }]}>Header row (exact order):</ThemedText>
+            <ThemedText style={styles.modalCode}>Full Name, Roll Number, Email, Class</ThemedText>
+            <ThemedText style={[styles.modalText, { color: Colors[colorScheme ?? 'light'].textSecondary }]}>Sample row:</ThemedText>
+            <ThemedText style={styles.modalCode}>Rahul Sharma, STU-001, rahul@example.com, 10</ThemedText>
+
+            <TouchableOpacity
+              style={[styles.modalCloseButton, { backgroundColor: Colors[colorScheme ?? 'light'].tint }]}
+              onPress={() => setShowFormatModal(false)}>
+              <ThemedText style={styles.modalCloseButtonText}>Close</ThemedText>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
@@ -438,6 +611,146 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 16,
   },
+  importRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  importCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  importButton: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  importButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  uploadIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploadSymbol: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  importTextGroup: {
+    flex: 1,
+  },
+  importButtonText: {
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  importSubText: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  importHint: {
+    marginBottom: 2,
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  infoButton: {
+    borderWidth: 1,
+    borderRadius: 12,
+    width: 46,
+    height: 46,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  infoSymbol: {
+    fontSize: 20,
+    fontWeight: '800',
+    lineHeight: 22,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  modalCard: {
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 16,
+  },
+  modalTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  modalInfoBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalInfoBadgeText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  modalText: {
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  modalCode: {
+    fontSize: 12,
+    marginBottom: 10,
+    fontWeight: '600',
+  },
+  modalCloseButton: {
+    marginTop: 6,
+    height: 42,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCloseButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+  },
   studentCard: {
     flexDirection: 'row',
     padding: 16,
@@ -500,5 +813,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 8,
+  },
+  importBanner: {
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 14,
+  },
+  importBannerText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
+    textAlign: 'center',
   },
 });

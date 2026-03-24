@@ -1,4 +1,4 @@
-import { StyleSheet, View, TouchableOpacity, ScrollView, Alert, Platform, Switch } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, ScrollView, Alert, Platform, Switch, ActivityIndicator } from 'react-native';
 import { useEffect, useState } from 'react';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -8,23 +8,59 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { router } from 'expo-router';
 import CommonHeader from '@/components/CommonHeader';
+import ChangePasswordModal from '@/components/ChangePasswordModal';
+import { studentManagementAPI } from '@/services/api';
+
+interface StudentProfile {
+  registerNumber?: string;
+  className?: string;
+  section?: string;
+  parentName?: string;
+  parentNames?: string[];
+  fatherName?: string;
+  motherName?: string;
+  [key: string]: any;
+}
 
 export default function ProfileScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
-  const { user, logout } = useAuth();
+  const { user, logout, token } = useAuth();
   const [showSettings, setShowSettings] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [vibrationEnabled, setVibrationEnabled] = useState(true);
+  const [changePasswordVisible, setChangePasswordVisible] = useState(false);
+  const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+
+  // Fetch student profile on mount
+  const fetchStudentProfile = async () => {
+    if (!user?.studentId || !token) {
+      setLoadingProfile(false);
+      return;
+    }
+
+    try {
+      const response = await studentManagementAPI.getStudentProfile(user.studentId, token);
+      if (response?.success && response.data) {
+        setStudentProfile(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching student profile:', error);
+    } finally {
+      setLoadingProfile(false);
+    }
+  };
 
   useEffect(() => {
     console.log('ProfileScreen mounted');
     console.log('User:', user);
     console.log('Logout function type:', typeof logout);
     console.log('Logout function:', logout);
-  }, []);
+    fetchStudentProfile();
+  }, [user?.studentId, token]);
 
   const handleLogout = async () => {
     console.log('===== LOGOUT BUTTON CLICKED =====');
@@ -182,6 +218,119 @@ export default function ProfileScreen() {
               )}
             </View>
 
+            {/* Student Information */}
+            {user?.role === 'student' && (
+              <>
+                <ThemedText type="subtitle" style={styles.sectionTitle}>
+                  Academic Details
+                </ThemedText>
+
+                <View style={[styles.infoCard, { marginHorizontal: 16 }]}>
+                  {loadingProfile ? (
+                    <View style={styles.loadingContainer}>
+                      <ActivityIndicator size="small" color={colors.tint} />
+                    </View>
+                  ) : (
+                    <>
+                      {studentProfile?.registerNumber && (
+                        <View style={styles.infoRow}>
+                          <IconSymbol name="number.circle.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
+                          <View style={styles.infoContent}>
+                            <ThemedText style={styles.infoLabel}>Register Number</ThemedText>
+                            <ThemedText style={styles.infoValue}>{studentProfile.registerNumber}</ThemedText>
+                          </View>
+                        </View>
+                      )}
+
+                      {(studentProfile?.className || studentProfile?.class) && (
+                        <View style={[styles.infoRow, studentProfile?.section ? styles.infoRowBorder : {}]}>
+                          <IconSymbol name="book.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
+                          <View style={styles.infoContent}>
+                            <ThemedText style={styles.infoLabel}>Class</ThemedText>
+                            <ThemedText style={styles.infoValue}>{studentProfile.className || studentProfile.class}</ThemedText>
+                          </View>
+                        </View>
+                      )}
+
+                      {studentProfile?.section && (
+                        <View style={styles.infoRow}>
+                          <IconSymbol name="list.number" size={18} color={Colors[colorScheme ?? 'light'].tint} />
+                          <View style={styles.infoContent}>
+                            <ThemedText style={styles.infoLabel}>Section</ThemedText>
+                            <ThemedText style={styles.infoValue}>{studentProfile.section}</ThemedText>
+                          </View>
+                        </View>
+                      )}
+                    </>
+                  )}
+                </View>
+
+                {/* Parent Information */}
+                <ThemedText type="subtitle" style={styles.sectionTitle}>
+                  Parent Details
+                </ThemedText>
+
+                <View style={[styles.infoCard, { marginHorizontal: 16 }]}>
+                  {loadingProfile ? (
+                    <View style={styles.loadingContainer}>
+                      <ActivityIndicator size="small" color={colors.tint} />
+                    </View>
+                  ) : (
+                    <>
+                      {(studentProfile?.parentName || studentProfile?.fatherName) && (
+                        <View style={[styles.infoRow, (studentProfile?.motherName || studentProfile?.parentNames) ? styles.infoRowBorder : {}]}>
+                          <IconSymbol name="person.2.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
+                          <View style={styles.infoContent}>
+                            <ThemedText style={styles.infoLabel}>Father</ThemedText>
+                            <ThemedText style={styles.infoValue}>{studentProfile.fatherName || studentProfile.parentName}</ThemedText>
+                          </View>
+                        </View>
+                      )}
+
+                      {studentProfile?.motherName && (
+                        <View style={styles.infoRow}>
+                          <IconSymbol name="person.2.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
+                          <View style={styles.infoContent}>
+                            <ThemedText style={styles.infoLabel}>Mother</ThemedText>
+                            <ThemedText style={styles.infoValue}>{studentProfile.motherName}</ThemedText>
+                          </View>
+                        </View>
+                      )}
+
+                      {studentProfile?.parentNames && studentProfile.parentNames.length > 0 && !studentProfile?.fatherName && !studentProfile?.motherName && (
+                        <View style={styles.infoRow}>
+                          <IconSymbol name="person.2.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
+                          <View style={styles.infoContent}>
+                            <ThemedText style={styles.infoLabel}>Parents</ThemedText>
+                            <ThemedText style={styles.infoValue}>{studentProfile.parentNames.join(', ')}</ThemedText>
+                          </View>
+                        </View>
+                      )}
+                    </>
+                  )}
+                </View>
+              </>
+            )}
+
+            {/* Change Password Section */}
+            <ThemedText type="subtitle" style={styles.sectionTitle}>
+              Security
+            </ThemedText>
+
+            <View style={[styles.infoCard, { marginHorizontal: 16, marginBottom: 24 }]}>
+              <TouchableOpacity
+                style={styles.infoRow}
+                onPress={() => setChangePasswordVisible(true)}
+                activeOpacity={0.6}>
+                <IconSymbol name="lock.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
+                <View style={styles.infoContent}>
+                  <ThemedText style={styles.infoLabel}>Password</ThemedText>
+                  <ThemedText style={styles.infoValue}>Change your password</ThemedText>
+                </View>
+                <IconSymbol name="chevron.right" size={18} color="#94a3b8" />
+              </TouchableOpacity>
+            </View>
+
             {/* Logout Button */}
             <TouchableOpacity
               style={[styles.logoutButton, { marginHorizontal: 16, marginTop: 24 }]}
@@ -200,6 +349,11 @@ export default function ProfileScreen() {
               </ThemedText>
             </View>
       </ScrollView>
+
+      <ChangePasswordModal 
+        visible={changePasswordVisible}
+        onClose={() => setChangePasswordVisible(false)}
+      />
     </ThemedView>
   );
 }
@@ -410,5 +564,10 @@ const styles = StyleSheet.create({
   },
   expandedSettings: {
     paddingTop: 4,
+  },
+  loadingContainer: {
+    paddingVertical: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

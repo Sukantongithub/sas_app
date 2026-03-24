@@ -53,7 +53,7 @@ interface TimeRecord {
 export default function StudentAttendanceScreen() {
   const colorScheme = useColorScheme();
   const { user, token } = useAuth();
-  const [activeTab, setActiveTab] = useState<'daily' | 'subject' | 'monthly' | 'time'>('daily');
+  const [activeTab, setActiveTab] = useState<'day' | 'subject' | 'semester'>('day');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -80,7 +80,7 @@ export default function StudentAttendanceScreen() {
     setLoading(true);
     try {
       switch (activeTab) {
-        case 'daily':
+        case 'day':
           const daily = await attendanceAPI.getStudentDaily(studentId, selectedDate, token);
           setDailyData(daily);
           break;
@@ -88,13 +88,9 @@ export default function StudentAttendanceScreen() {
           const subject = await attendanceAPI.getStudentSubjectWise(studentId, {}, token);
           setSubjectData(subject);
           break;
-        case 'monthly':
+        case 'semester':
           const monthly = await attendanceAPI.getStudentMonthly(studentId, new Date().getFullYear(), new Date().getMonth() + 1, token);
           setMonthlyData(monthly);
-          break;
-        case 'time':
-          const time = await attendanceAPI.getStudentTimeRecords(studentId, {}, token);
-          setTimeRecords(time.records || []);
           break;
       }
     } catch (error: any) {
@@ -403,23 +399,20 @@ export default function StudentAttendanceScreen() {
   }
 
   const getContentView = () => {
-    if (activeTab === 'daily') return renderDailyView();
+    if (activeTab === 'day') return renderDailyView();
     if (activeTab === 'subject') return renderSubjectView();
-    if (activeTab === 'monthly') return renderMonthlyView();
-    if (activeTab === 'time') return renderTimeView();
+    if (activeTab === 'semester') return renderMonthlyView();
     return null;
   };
 
   const getListData = () => {
     switch (activeTab) {
-      case 'daily':
+      case 'day':
         return dailyData?.records || [];
       case 'subject':
         return subjectData?.subjectWise || [];
-      case 'monthly':
+      case 'semester':
         return monthlyData?.dailyBreakdown || [];
-      case 'time':
-        return timeRecords;
       default:
         return [];
     }
@@ -432,14 +425,14 @@ export default function StudentAttendanceScreen() {
       {/* Tab Navigation */}
       <View style={styles.tabBar}>
         <TouchableOpacity
-          style={[styles.tabItem, activeTab === 'daily' && styles.activeTab]}
-          onPress={() => setActiveTab('daily')}>
+          style={[styles.tabItem, activeTab === 'day' && styles.activeTab]}
+          onPress={() => setActiveTab('day')}>
           <IconSymbol
             name="calendar"
             size={18}
-            color={activeTab === 'daily' ? '#fff' : Colors[colorScheme ?? 'light'].text}
+            color={activeTab === 'day' ? '#fff' : Colors[colorScheme ?? 'light'].text}
           />
-          <ThemedText style={[styles.tabLabel, activeTab === 'daily' && styles.activeTabLabel]}>Daily</ThemedText>
+          <ThemedText style={[styles.tabLabel, activeTab === 'day' && styles.activeTabLabel]}>Day</ThemedText>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -454,25 +447,14 @@ export default function StudentAttendanceScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.tabItem, activeTab === 'monthly' && styles.activeTab]}
-          onPress={() => setActiveTab('monthly')}>
+          style={[styles.tabItem, activeTab === 'semester' && styles.activeTab]}
+          onPress={() => setActiveTab('semester')}>
           <IconSymbol
             name="chart.bar.fill"
             size={18}
-            color={activeTab === 'monthly' ? '#fff' : Colors[colorScheme ?? 'light'].text}
+            color={activeTab === 'semester' ? '#fff' : Colors[colorScheme ?? 'light'].text}
           />
-          <ThemedText style={[styles.tabLabel, activeTab === 'monthly' && styles.activeTabLabel]}>Month</ThemedText>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tabItem, activeTab === 'time' && styles.activeTab]}
-          onPress={() => setActiveTab('time')}>
-          <IconSymbol
-            name="clock.fill"
-            size={18}
-            color={activeTab === 'time' ? '#fff' : Colors[colorScheme ?? 'light'].text}
-          />
-          <ThemedText style={[styles.tabLabel, activeTab === 'time' && styles.activeTabLabel]}>Time</ThemedText>
+          <ThemedText style={[styles.tabLabel, activeTab === 'semester' && styles.activeTabLabel]}>Semester</ThemedText>
         </TouchableOpacity>
       </View>
 
@@ -493,7 +475,7 @@ export default function StudentAttendanceScreen() {
             />
           }
           renderItem={({ item }) => {
-            if (activeTab === 'daily' && item) {
+            if (activeTab === 'day' && item) {
               return (
                 <ThemedView style={[styles.recordCard, { marginHorizontal: 16 }]}>
                   <View style={styles.recordHeader}>
@@ -548,7 +530,7 @@ export default function StudentAttendanceScreen() {
                 </ThemedView>
               );
             }
-            if (activeTab === 'monthly' && item) {
+            if (activeTab === 'semester' && item) {
               const dayPercentage = item.total > 0 ? (item.present / item.total) * 100 : 0;
               return (
                 <ThemedView style={[styles.dailyBreakdownCard, { marginHorizontal: 16 }]}>
@@ -564,39 +546,6 @@ export default function StudentAttendanceScreen() {
                     <ThemedText style={styles.dailyBreakdownStat}>P: {item.present}</ThemedText>
                     <ThemedText style={styles.dailyBreakdownStat}>A: {item.absent}</ThemedText>
                     <ThemedText style={styles.dailyBreakdownStat}>L: {item.late}</ThemedText>
-                  </View>
-                </ThemedView>
-              );
-            }
-            if (activeTab === 'time' && item) {
-              return (
-                <ThemedView style={[styles.timeCard, { marginHorizontal: 16 }]}>
-                  <View style={styles.timeHeader}>
-                    <View>
-                      <ThemedText type="defaultSemiBold">{item.subject}</ThemedText>
-                      <ThemedText style={styles.timeDate}>
-                        {new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </ThemedText>
-                    </View>
-                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-                      <ThemedText style={styles.statusText}>{item.status.toUpperCase()}</ThemedText>
-                    </View>
-                  </View>
-                  <View style={styles.timeDetails}>
-                    <View style={styles.timeDetailItem}>
-                      <IconSymbol name="arrow.right.circle" size={16} color={Colors[colorScheme ?? 'light'].tint} />
-                      <View>
-                        <ThemedText style={styles.timeDetailLabel}>Entry</ThemedText>
-                        <ThemedText style={styles.timeDetailValue}>{formatTime(item.entryTime)}</ThemedText>
-                      </View>
-                    </View>
-                    <View style={styles.timeDetailItem}>
-                      <IconSymbol name="arrow.left.circle" size={16} color={Colors[colorScheme ?? 'light'].tint} />
-                      <View>
-                        <ThemedText style={styles.timeDetailLabel}>Exit</ThemedText>
-                        <ThemedText style={styles.timeDetailValue}>{formatTime(item.exitTime)}</ThemedText>
-                      </View>
-                    </View>
                   </View>
                 </ThemedView>
               );

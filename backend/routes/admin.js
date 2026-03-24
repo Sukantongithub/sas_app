@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { body } = require('express-validator');
+const multer = require('multer');
+const XLSX = require('xlsx');
 const User = require('../models/User');
 const Student = require('../models/Student');
 const Staff = require('../models/Staff');
@@ -16,6 +18,28 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+
+const excelUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedMimeTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+      'text/csv',
+      'application/csv'
+    ];
+
+    const isAllowedMime = allowedMimeTypes.includes(file.mimetype);
+    const hasAllowedExtension = /\.(xlsx|xls|csv)$/i.test(file.originalname || '');
+
+    if (isAllowedMime || hasAllowedExtension) {
+      return cb(null, true);
+    }
+
+    return cb(new Error('Only .xlsx, .xls, or .csv files are allowed'));
+  }
+});
 
 const generateToken = (userId) => {
   return jwt.sign(
@@ -361,6 +385,188 @@ router.post('/students',
 );
 
 /**
+ * @route   POST /api/admin/students/import
+ * @desc    Bulk import students from Excel/CSV
+ * @access  Admin only
+ */
+router.post('/students/import',
+  requireAuth,
+  requireRoles('super_admin', 'admin'),
+  (req, res, next) => {
+    // Wrap multer so its errors are caught and returned as JSON
+    excelUpload.single('file')(req, res, (err) => {
+      if (err) {
+        return res.status(400).json({ success: false, message: err.message || 'File upload error' });
+      }
+      next();
+    });
+  },
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ success: false, message: 'Please upload an Excel/CSV file' });
+      }
+
+      const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+      const firstSheetName = workbook.SheetNames[0];
+
+      if (!firstSheetName) {
+        return res.status(400).json({ success: false, message: 'The uploaded file has no sheets' });
+      }
+
+      const sheet = workbook.Sheets[firstSheetName];
+      const headerRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+      if (!headerRows.length) {
+        return res.status(400).json({ success: false, message: 'The uploaded file is empty' });
+      }
+
+      const normalizeHeader = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const actualHeaders = (headerRows[0] || []).map(normalizeHeader).filter(Boolean);
+      const expectedHeaders = ['fullname', 'rollnumber', 'email', 'class'];
+      const hasExactFormat =
+        actualHeaders.length === expectedHeaders.length
+        && expectedHeaders.every((header, index) => actualHeaders[index] === header);
+
+      if (!hasExactFormat) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid file format. Header must be exactly: Full Name, Roll Number, Email, Class'
+        });
+      }
+
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+      if (!rows.length) {
+        return res.status(400).json({ success: false, message: 'No student rows found in the file' });
+      }
+
+      const getValueFromRow = (normalizedRow, key) => {
+        if (normalizedRow[key]) {
+          return String(normalizedRow[key]).trim();
+        }
+        return '';
+      };
+
+      const parsedRows = rows.map((rawRow, index) => {
+        const normalizedRow = Object.entries(rawRow).reduce((acc, [key, value]) => {
+          const normalizedKey = String(key).toLowerCase().replace(/[^a-z0-9]/g, '');
+          acc[normalizedKey] = value;
+          return acc;
+        }, {});
+
+        const name = getValueFromRow(normalizedRow, 'fullname');
+        const rollNumber = getValueFromRow(normalizedRow, 'rollnumber');
+        const email = getValueFromRow(normalizedRow, 'email');
+        const studentClass = getValueFromRow(normalizedRow, 'class');
+
+        return {
+          rowNumber: index + 2,
+          name,
+          rollNumber,
+          class: studentClass,
+          email
+        };
+      });
+
+      const skipped = [];
+      const seenRollNumbers = new Set();
+      const candidates = [];
+
+      for (const row of parsedRows) {
+        if (!row.name || !row.rollNumber || !row.email || !row.class) {
+          skipped.push({ row: row.rowNumber, reason: 'Missing required values: Full Name, Roll Number, Email, or Class' });
+          continue;
+        }
+
+        const normalizedRoll = row.rollNumber.toLowerCase();
+        if (seenRollNumbers.has(normalizedRoll)) {
+          skipped.push({ row: row.rowNumber, reason: `Duplicate roll number in file: ${row.rollNumber}` });
+          continue;
+        }
+
+        seenRollNumbers.add(normalizedRoll);
+        candidates.push(row);
+      }
+
+      // Check existing roll numbers in Student collection
+      const existingRolls = new Set(
+        (await Student.find({ rollNumber: { $in: candidates.map(c => c.rollNumber) } }).select('rollNumber -_id'))
+          .map(s => s.rollNumber.toLowerCase())
+      );
+
+      // Check existing emails in User collection (so login account duplication is avoided)
+      const existingEmails = new Set(
+        (await User.find({ email: { $in: candidates.map(c => c.email.toLowerCase()) } }).select('email -_id'))
+          .map(u => u.email.toLowerCase())
+      );
+
+      const studentsToCreate = [];
+      for (const row of candidates) {
+        if (existingRolls.has(row.rollNumber.toLowerCase())) {
+          skipped.push({ row: row.rowNumber, reason: `Roll number already exists: ${row.rollNumber}` });
+          continue;
+        }
+        if (existingEmails.has(row.email.toLowerCase())) {
+          skipped.push({ row: row.rowNumber, reason: `Email already registered: ${row.email}` });
+          continue;
+        }
+        studentsToCreate.push(row);
+      }
+
+      let createdCount = 0;
+      const rowErrors = [];
+
+      for (const row of studentsToCreate) {
+        try {
+          // Save Student profile first to get its _id
+          const student = new Student({
+            name: row.name,
+            rollNumber: row.rollNumber,
+            email: row.email.toLowerCase(),
+            class: row.class
+          });
+          await student.save();
+
+          // Create User login account linked to Student.
+          // Default password = roll number (student should change on first login).
+          const user = new User({
+            name: row.name,
+            email: row.email.toLowerCase(),
+            password: row.rollNumber,
+            role: 'student',
+            studentId: student._id,
+            isActive: true
+          });
+          await user.save();
+
+          createdCount++;
+        } catch (rowErr) {
+          console.error(`Import row ${row.rowNumber} failed:`, rowErr.message);
+          rowErrors.push({ row: row.rowNumber, reason: rowErr.message });
+        }
+      }
+
+      const allSkipped = [...skipped, ...rowErrors];
+
+      res.status(201).json({
+        success: true,
+        message: `Imported ${createdCount} student(s). Default password is their roll number.`,
+        data: {
+          totalRows: rows.length,
+          created: createdCount,
+          skipped: allSkipped.length,
+          skippedRows: allSkipped.slice(0, 50)
+        }
+      });
+    } catch (error) {
+      console.error('Student import error:', error);
+      res.status(400).json({ success: false, message: error.message || 'Failed to import students' });
+    }
+  }
+);
+
+/**
  * @route   PUT /api/admin/students/:id
  * @desc    Update student
  * @access  Admin only
@@ -403,6 +609,14 @@ router.delete('/students/:id', requireAuth, requireRoles('super_admin', 'admin')
 
     // Delete associated attendance records
     await Attendance.deleteMany({ studentId: student._id });
+
+    // Delete linked User account (matched by studentId reference or email)
+    await User.findOneAndDelete({
+      $or: [
+        { studentId: student._id },
+        { email: student.email }
+      ]
+    });
 
     res.json({ success: true, message: 'Student and records deleted successfully' });
   } catch (error) {
@@ -852,7 +1066,7 @@ router.put('/users/:id/role',
   requireAuth,
   requireRoles('super_admin'),
   [
-    body('role').isIn(['super_admin', 'admin', 'faculty', 'teacher', 'student', 'parent', 'staff', 'hr'])
+    body('role').isIn(['super_admin', 'admin', 'hod', 'staff', 'student', 'parent'])
       .withMessage('Invalid role')
   ],
   validateRequest,

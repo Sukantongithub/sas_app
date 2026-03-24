@@ -32,9 +32,9 @@ export type RoleNavConfig = Record<AppRole, {
 export const TAB_NAVIGATION: RoleNavConfig = {
   parent: {
     tabs: [
-      { name: 'Attendance', route: 'student-attendance', icon: 'chart.bar.fill', title: 'Attendance' },
+      { name: 'Attendance', route: 'parent-attendance', icon: 'chart.bar.fill', title: "Son's Attendance" },
       { name: 'Messages', route: 'alerts', icon: 'bubble.left.and.bubble.right.fill', title: 'Messages' },
-      { name: 'Profile', route: 'profile', icon: 'person.circle.fill', title: 'Profile' },
+      { name: 'Profile', route: 'parent-profile', icon: 'person.circle.fill', title: 'Profile' },
     ],
   },
   student: {
@@ -94,11 +94,13 @@ export const TAB_NAVIGATION: RoleNavConfig = {
  * Get allowed roles for specific routes
  */
 export const ROUTE_ACCESS: Record<string, AppRole[]> = {
-  '/(tabs)/student-attendance': ['student', 'parent', 'staff', 'hod'],
+  '/(tabs)/student-attendance': ['student', 'staff', 'hod'],
+  '/(tabs)/parent-attendance': ['parent'],
   '/(tabs)/interactions': ['student', 'staff', 'hod'],
   '/(tabs)/timetable': ['student', 'staff', 'hod'],
   '/(tabs)/alerts': ['student', 'parent', 'staff', 'hod'],
-  '/(tabs)/profile': ['student', 'parent', 'staff', 'hod'],
+  '/(tabs)/profile': ['student', 'staff', 'hod'],
+  '/(tabs)/parent-profile': ['parent'],
   '/(tabs)/index': ['staff', 'hod'],
   '/(tabs)/explore': ['staff', 'hod'],
   '/admin': ['admin', 'super_admin'],
