@@ -120,7 +120,7 @@ router.post('/staff',
   validateRequest,
   async (req, res) => {
     try {
-      const { name, email, password, employeeId, designation, department, phone, address, salary, qualifications, dateOfJoining } = req.body;
+      const { name, email, password, employeeId, designation, department, phone, address, salary, qualifications, dateOfJoining, classIds } = req.body;
 
       // Check if email already exists
       const existingUser = await User.findOne({ email });
@@ -162,6 +162,14 @@ router.post('/staff',
 
       const savedStaff = await staff.save();
 
+      // Assign staff to selected classes (add to faculty array)
+      if (Array.isArray(classIds) && classIds.length > 0) {
+        await Class.updateMany(
+          { _id: { $in: classIds } },
+          { $addToSet: { faculty: savedUser._id } }
+        );
+      }
+
       // Populate user details in response
       await savedStaff.populate('userId', 'name email phone role isActive');
 
@@ -172,6 +180,169 @@ router.post('/staff',
       });
     } catch (error) {
       res.status(400).json({ success: false, message: error.message });
+    }
+  }
+);
+
+/**
+ * @route   POST /api/admin/staff/import
+ * @desc    Bulk import staff from Excel/CSV
+ * @access  Admin only
+ * Excel columns: Name, Email, Employee ID, Designation, Department
+ * Default password = Employee ID
+ */
+router.post('/staff/import',
+  requireAuth,
+  requireRoles('super_admin', 'admin'),
+  (req, res, next) => {
+    excelUpload.single('file')(req, res, (err) => {
+      if (err) return res.status(400).json({ success: false, message: err.message || 'File upload error' });
+      next();
+    });
+  },
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ success: false, message: 'Please upload an Excel/CSV file' });
+      }
+
+      const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+      const firstSheetName = workbook.SheetNames[0];
+      if (!firstSheetName) {
+        return res.status(400).json({ success: false, message: 'The uploaded file has no sheets' });
+      }
+
+      const sheet = workbook.Sheets[firstSheetName];
+      const headerRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+      if (!headerRows.length) {
+        return res.status(400).json({ success: false, message: 'The uploaded file is empty' });
+      }
+
+      const normalizeHeader = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const actualHeaders = (headerRows[0] || []).map(normalizeHeader).filter(Boolean);
+      const expectedHeaders = ['name', 'email', 'employeeid', 'designation', 'department'];
+      const missingHeaders = expectedHeaders.filter(h => !actualHeaders.includes(h));
+      if (missingHeaders.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Invalid file format. Missing columns: ${missingHeaders.join(', ')}. Required: Name, Email, Employee ID, Designation, Department`
+        });
+      }
+
+      const validDesignations = ['admin', 'staff', 'security', 'maintenance', 'office_manager'];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+      if (!rows.length) {
+        return res.status(400).json({ success: false, message: 'No staff rows found in the file' });
+      }
+
+      const getVal = (normalizedRow, key) => String(normalizedRow[key] || '').trim();
+
+      const parsedRows = rows.map((rawRow, index) => {
+        const normalizedRow = Object.entries(rawRow).reduce((acc, [k, v]) => {
+          acc[normalizeHeader(k)] = v;
+          return acc;
+        }, {});
+        return {
+          rowNumber: index + 2,
+          name: getVal(normalizedRow, 'name'),
+          email: getVal(normalizedRow, 'email').toLowerCase(),
+          employeeId: getVal(normalizedRow, 'employeeid'),
+          designation: getVal(normalizedRow, 'designation').toLowerCase().replace(/\s+/g, '_'),
+          department: getVal(normalizedRow, 'department'),
+          phone: getVal(normalizedRow, 'phone') || '',
+        };
+      });
+
+      const skipped = [];
+      const seenEmployeeIds = new Set();
+      const candidates = [];
+
+      for (const row of parsedRows) {
+        if (!row.name || !row.email || !row.employeeId || !row.designation || !row.department) {
+          skipped.push({ row: row.rowNumber, reason: 'Missing required values: Name, Email, Employee ID, Designation, Department' });
+          continue;
+        }
+        if (!validDesignations.includes(row.designation)) {
+          skipped.push({ row: row.rowNumber, reason: `Invalid designation "${row.designation}". Must be one of: ${validDesignations.join(', ')}` });
+          continue;
+        }
+        if (seenEmployeeIds.has(row.employeeId.toLowerCase())) {
+          skipped.push({ row: row.rowNumber, reason: `Duplicate Employee ID in file: ${row.employeeId}` });
+          continue;
+        }
+        seenEmployeeIds.add(row.employeeId.toLowerCase());
+        candidates.push(row);
+      }
+
+      // Check existing records
+      const existingEmails = new Set(
+        (await User.find({ email: { $in: candidates.map(c => c.email) } }).select('email -_id'))
+          .map(u => u.email.toLowerCase())
+      );
+      const existingEmpIds = new Set(
+        (await Staff.find({ employeeId: { $in: candidates.map(c => c.employeeId) } }).select('employeeId -_id'))
+          .map(s => s.employeeId.toLowerCase())
+      );
+
+      const staffToCreate = [];
+      for (const row of candidates) {
+        if (existingEmails.has(row.email)) {
+          skipped.push({ row: row.rowNumber, reason: `Email already registered: ${row.email}` });
+          continue;
+        }
+        if (existingEmpIds.has(row.employeeId.toLowerCase())) {
+          skipped.push({ row: row.rowNumber, reason: `Employee ID already exists: ${row.employeeId}` });
+          continue;
+        }
+        staffToCreate.push(row);
+      }
+
+      let createdCount = 0;
+      const rowErrors = [];
+
+      for (const row of staffToCreate) {
+        try {
+          const user = new User({
+            name: row.name,
+            email: row.email,
+            password: row.employeeId, // default password = employee ID
+            role: row.designation === 'admin' ? 'admin' : 'staff',
+            phone: row.phone || undefined,
+            isActive: true
+          });
+          await user.save();
+
+          const staff = new Staff({
+            userId: user._id,
+            employeeId: row.employeeId,
+            designation: row.designation,
+            department: row.department,
+            phone: row.phone || undefined,
+            dateOfJoining: new Date(),
+            isActive: true
+          });
+          await staff.save();
+          createdCount++;
+        } catch (rowErr) {
+          console.error(`Import row ${row.rowNumber} failed:`, rowErr.message);
+          rowErrors.push({ row: row.rowNumber, reason: rowErr.message });
+        }
+      }
+
+      const allSkipped = [...skipped, ...rowErrors];
+      res.status(201).json({
+        success: true,
+        message: `Imported ${createdCount} staff member(s). Default password is their Employee ID.`,
+        data: {
+          totalRows: rows.length,
+          created: createdCount,
+          skipped: allSkipped.length,
+          skippedRows: allSkipped.slice(0, 50)
+        }
+      });
+    } catch (error) {
+      console.error('Staff import error:', error);
+      res.status(400).json({ success: false, message: error.message || 'Failed to import staff' });
     }
   }
 );
@@ -1284,8 +1455,53 @@ router.delete('/departments/:id', requireAuth, requireRoles('super_admin', 'admi
 // ==================== CLASS MANAGEMENT ====================
 
 /**
+ * @route   GET /api/admin/classes
+ * @desc    Get all classes with optional filtering
+ * @access  Admin, Teacher
+ */
+router.get('/classes', requireAuth, requireRoles('super_admin', 'admin', 'teacher'), async (req, res) => {
+  try {
+    const filter = {};
+    if (req.query.department) filter.department = req.query.department;
+    if (req.query.semester) filter.semester = Number(req.query.semester);
+    if (req.query.isActive !== undefined) filter.isActive = req.query.isActive === 'true';
+
+    const classes = await Class.find(filter)
+      .populate('coordinator', 'name email')
+      .populate('faculty', 'name email role')
+      .sort({ name: 1 });
+    
+    res.json({ success: true, count: classes.length, data: classes });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * @route   GET /api/admin/classes/:id
+ * @desc    Get single class by ID
+ * @access  Admin, Teacher
+ */
+router.get('/classes/:id', requireAuth, requireRoles('super_admin', 'admin', 'teacher'), async (req, res) => {
+  try {
+    const klass = await Class.findById(req.params.id)
+      .populate('coordinator', 'name email')
+      .populate('faculty', 'name email role')
+      .populate('students', 'name email rollNumber');
+    
+    if (!klass) {
+      return res.status(404).json({ success: false, message: 'Class not found' });
+    }
+    
+    res.json({ success: true, data: klass });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
  * @route   POST /api/admin/classes
- * @desc    Create class
+ * @desc    Create a new class
  * @access  Admin only
  */
 router.post('/classes',
@@ -1295,24 +1511,40 @@ router.post('/classes',
     body('name').notEmpty().withMessage('Name is required'),
     body('code').notEmpty().withMessage('Code is required'),
     body('department').notEmpty().withMessage('Department is required'),
-    body('semester').isInt({ min: 1 }).withMessage('Semester must be a positive integer'),
+    body('semester').isInt({ min: 1, max: 12 }).withMessage('Semester must be between 1 and 12'),
     body('academicYear').notEmpty().withMessage('Academic year is required'),
+    body('startDate').optional().isISO8601().withMessage('Start date must be a valid date'),
   ],
   validateRequest,
   async (req, res) => {
     try {
-      const existing = await Class.findOne({ $or: [{ name: req.body.name }, { code: req.body.code.toUpperCase() }] });
+      const { name, code, department, semester, academicYear, section, classroom, coordinator, startDate, endDate } = req.body;
+      
+      // Check for duplicates
+      const existing = await Class.findOne({ $or: [{ name }, { code: code.toUpperCase() }] });
       if (existing) {
-        return res.status(400).json({ success: false, message: 'Class name or code already exists' });
+        return res.status(400).json({ success: false, message: 'A class with this name or code already exists' });
       }
 
       const klass = await Class.create({
-        ...req.body,
-        code: req.body.code.toUpperCase(),
+        name,
+        code: code.toUpperCase(),
+        department,
+        semester: Number(semester),
+        academicYear,
+        section,
+        classroom,
+        coordinator,
+        startDate: startDate || new Date(),
+        endDate,
+        isActive: true
       });
 
-      res.status(201).json({ success: true, message: 'Class created', data: klass });
+      res.status(201).json({ success: true, message: 'Class created successfully', data: klass });
     } catch (error) {
+      if (error.code === 11000) {
+        return res.status(400).json({ success: false, message: 'Class name or code already exists' });
+      }
       res.status(400).json({ success: false, message: error.message });
     }
   }
@@ -1320,44 +1552,74 @@ router.post('/classes',
 
 /**
  * @route   PUT /api/admin/classes/:id
- * @desc    Update class
+ * @desc    Update a class
  * @access  Admin only
  */
-router.put('/classes/:id', requireAuth, requireRoles('super_admin', 'admin'), async (req, res) => {
-  try {
-    const klass = await Class.findById(req.params.id);
-    if (!klass) return res.status(404).json({ success: false, message: 'Class not found' });
-
-    const fields = ['name', 'code', 'department', 'semester', 'academicYear', 'section', 'coordinator', 'beaconId', 'classroom', 'location', 'attendanceSettings'];
-    fields.forEach((field) => {
-      if (req.body[field] !== undefined) {
-        if (field === 'code') {
-          klass.code = req.body.code.toUpperCase();
-        } else {
-          klass[field] = req.body[field];
-        }
+router.put('/classes/:id', 
+  requireAuth, 
+  requireRoles('super_admin', 'admin'),
+  [
+    body('code').optional().custom(value => {
+      if (value && !/^[A-Za-z0-9\-]+$/.test(value)) {
+        throw new Error('Code must be alphanumeric');
       }
-    });
+      return true;
+    }),
+    body('semester').optional().isInt({ min: 1, max: 12 }),
+  ],
+  validateRequest,
+  async (req, res) => {
+    try {
+      const klass = await Class.findById(req.params.id);
+      if (!klass) {
+        return res.status(404).json({ success: false, message: 'Class not found' });
+      }
 
-    await klass.save();
-    res.json({ success: true, message: 'Class updated', data: klass });
-  } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+      // List of updatable fields
+      const updatableFields = [
+        'name', 'code', 'department', 'semester', 'academicYear', 
+        'section', 'coordinator', 'beaconId', 'classroom', 'location', 
+        'isActive', 'startDate', 'endDate'
+      ];
+
+      updatableFields.forEach((field) => {
+        if (req.body[field] !== undefined) {
+          if (field === 'code') {
+            klass[field] = req.body[field].toUpperCase();
+          } else {
+            klass[field] = req.body[field];
+          }
+        }
+      });
+
+      await klass.save();
+      res.json({ success: true, message: 'Class updated successfully', data: klass });
+    } catch (error) {
+      if (error.code === 11000) {
+        return res.status(400).json({ success: false, message: 'Class name or code already exists' });
+      }
+      res.status(400).json({ success: false, message: error.message });
+    }
   }
-});
+);
 
 /**
  * @route   DELETE /api/admin/classes/:id
- * @desc    Delete class
+ * @desc    Delete/deactivate a class
  * @access  Admin only
  */
 router.delete('/classes/:id', requireAuth, requireRoles('super_admin', 'admin'), async (req, res) => {
   try {
     const klass = await Class.findById(req.params.id);
-    if (!klass) return res.status(404).json({ success: false, message: 'Class not found' });
+    if (!klass) {
+      return res.status(404).json({ success: false, message: 'Class not found' });
+    }
 
-    await klass.deleteOne();
-    res.json({ success: true, message: 'Class deleted' });
+    // Soft delete - deactivate instead of hard delete
+    klass.isActive = false;
+    await klass.save();
+    
+    res.json({ success: true, message: 'Class deactivated successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -1365,7 +1627,7 @@ router.delete('/classes/:id', requireAuth, requireRoles('super_admin', 'admin'),
 
 /**
  * @route   PUT /api/admin/classes/:id/attendance-settings
- * @desc    Update attendance rules for a class
+ * @desc    Update attendance rules/settings for a class
  * @access  Admin only
  */
 router.put('/classes/:id/attendance-settings',
@@ -1389,7 +1651,9 @@ router.put('/classes/:id/attendance-settings',
   async (req, res) => {
     try {
       const klass = await Class.findById(req.params.id);
-      if (!klass) return res.status(404).json({ success: false, message: 'Class not found' });
+      if (!klass) {
+        return res.status(404).json({ success: false, message: 'Class not found' });
+      }
 
       const settings = [
         'minimumRequiredPercentage',
@@ -1413,7 +1677,7 @@ router.put('/classes/:id/attendance-settings',
       });
 
       await klass.save();
-      res.json({ success: true, message: 'Attendance settings updated', data: klass.attendanceSettings });
+      res.json({ success: true, message: 'Attendance settings updated successfully', data: klass.attendanceSettings });
     } catch (error) {
       res.status(400).json({ success: false, message: error.message });
     }
@@ -1591,24 +1855,6 @@ router.delete('/timetables/:id', requireAuth, requireRoles('super_admin', 'admin
 
     await timetable.deleteOne();
     res.json({ success: true, message: 'Timetable deleted successfully' });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-/**
- * @route   GET /api/admin/classes
- * @desc    Get all classes
- * @access  Admin only
- */
-router.get('/classes', requireAuth, requireRoles('super_admin', 'admin', 'teacher'), async (req, res) => {
-  try {
-    const filter = {};
-    if (req.query.department) filter.department = req.query.department;
-    if (req.query.semester) filter.semester = Number(req.query.semester);
-
-    const classes = await Class.find(filter).sort({ name: 1 });
-    res.json({ success: true, count: classes.length, data: classes });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

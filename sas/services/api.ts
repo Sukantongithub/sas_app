@@ -723,3 +723,82 @@ export const studentManagementAPI = {
   },
 };
 
+// Timetable API (Staff / HOD management + student view)
+export const timetableAPI = {
+  // Get the classes assigned to logged-in teacher
+  getTeacherClasses: async (token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/teachers/timetable/my-classes`, {
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+
+  // Get full weekly timetable for a class
+  getClassTimetable: async (classId: string, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/teachers/timetable/class/${classId}`, {
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+
+  // Get teacher's own timetable (across all classes)
+  getTeacherTimetable: async (teacherId: string, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/teachers/timetable/${teacherId}`, {
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+
+  // Create or upsert a timetable entry (all periods for a class+day)
+  createTimetableEntry: async (data: {
+    classId: string;
+    dayOfWeek: string;
+    periods: Array<{
+      periodNumber: number;
+      subject: string;
+      startTime: string;
+      endTime: string;
+      room?: string;
+      isLab?: boolean;
+    }>;
+    section?: string;
+  }, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/teachers/timetable`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  // Update existing timetable entry by ID
+  updateTimetableEntry: async (timetableId: string, data: {
+    periods?: Array<{
+      periodNumber: number;
+      subject: string;
+      startTime: string;
+      endTime: string;
+      room?: string;
+      isLab?: boolean;
+    }>;
+    section?: string;
+  }, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/teachers/timetable/${timetableId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  // Delete (deactivate) a timetable entry
+  deleteTimetableEntry: async (timetableId: string, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/teachers/timetable/${timetableId}`, {
+      method: 'DELETE',
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+};
+
+

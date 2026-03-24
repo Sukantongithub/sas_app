@@ -185,6 +185,13 @@ export default function AdminScreen() {
           />
 
           <ActionCard
+            icon="rectangle.stack.badge.plus"
+            title="Manage Classes"
+            description="Create, edit, delete classes & configure settings"
+            onPress={() => router.push('/admin/classes')}
+          />
+
+          <ActionCard
             icon="calendar.badge.clock"
             title="Timetable & Shifts"
             description="Configure class schedules & shift timings"

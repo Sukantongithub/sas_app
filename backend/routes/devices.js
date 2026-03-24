@@ -18,51 +18,51 @@ function encryptDeviceId(deviceId, secretKey = process.env.DEVICE_ENCRYPTION_KEY
 // @access  Private (Student/Faculty)
 router.post('/pair', requireAuth, async (req, res) => {
   try {
-    const { 
-      deviceId, 
+    const {
+      deviceId,
       hardwareModel = 'nRF52840',
       imuModel = 'LSM6DSO',
       firmwareVersion = '1.0.0',
-      txPower = -59 
+      txPower = -59
     } = req.body;
-    
+
     if (!deviceId) {
       return res.status(400).json({ message: 'Device ID is required' });
     }
-    
+
     // Normalize device ID (uppercase, remove separators)
     const normalizedDeviceId = deviceId.toUpperCase().replace(/[:-]/g, '');
-    
+
     // Check if device already paired with another user
-    const existingDevice = await Device.findOne({ 
+    const existingDevice = await Device.findOne({
       deviceId: normalizedDeviceId,
-      isActive: true 
+      isActive: true
     });
-    
+
     if (existingDevice && !existingDevice.userId.equals(req.user._id)) {
-      return res.status(409).json({ 
+      return res.status(409).json({
         message: 'This device is already paired with another user',
         deviceId: normalizedDeviceId
       });
     }
-    
+
     // Check if user already has a device
     const userDevice = await Device.findOne({
       userId: req.user._id,
       isActive: true
     });
-    
+
     if (userDevice && userDevice.deviceId !== normalizedDeviceId) {
       return res.status(409).json({
         message: 'You already have a device paired. Please unpair it first.',
         existingDeviceId: userDevice.deviceId
       });
     }
-    
+
     // Generate encrypted ID and encryption key
     const encryptionKey = crypto.randomBytes(16).toString('hex');
     const encryptedId = encryptDeviceId(normalizedDeviceId, encryptionKey);
-    
+
     // Create or update device
     const device = await Device.findOneAndUpdate(
       { deviceId: normalizedDeviceId },
@@ -80,13 +80,13 @@ router.post('/pair', requireAuth, async (req, res) => {
         registeredAt: new Date(),
         pairedBy: req.user._id
       },
-      { 
-        upsert: true, 
+      {
+        upsert: true,
         new: true,
-        runValidators: true 
+        runValidators: true
       }
     );
-    
+
     res.status(201).json({
       message: 'Device paired successfully',
       device: {
@@ -101,9 +101,9 @@ router.post('/pair', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Device pairing error:', error);
-    res.status(500).json({ 
-      message: 'Error pairing device', 
-      error: error.message 
+    res.status(500).json({
+      message: 'Error pairing device',
+      error: error.message
     });
   }
 });
@@ -117,14 +117,14 @@ router.get('/my-device', requireAuth, async (req, res) => {
       userId: req.user._id,
       isActive: true
     }).select('-encryptionKey -__v');
-    
+
     if (!device) {
       return res.status(404).json({ message: 'No device paired' });
     }
-    
+
     // Check if device needs battery replacement
     const needsReplacement = device.needsBatteryReplacement();
-    
+
     res.json({
       device: {
         id: device._id,
@@ -146,9 +146,9 @@ router.get('/my-device', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Get device error:', error);
-    res.status(500).json({ 
-      message: 'Error fetching device', 
-      error: error.message 
+    res.status(500).json({
+      message: 'Error fetching device',
+      error: error.message
     });
   }
 });
@@ -159,22 +159,22 @@ router.get('/my-device', requireAuth, async (req, res) => {
 router.put('/:id/battery', requireAuth, async (req, res) => {
   try {
     const { batteryLevel, batteryVoltage } = req.body;
-    
+
     if (batteryLevel === undefined || batteryLevel < 0 || batteryLevel > 100) {
       return res.status(400).json({ message: 'Invalid battery level (0-100)' });
     }
-    
+
     const device = await Device.findOne({
       _id: req.params.id,
       userId: req.user._id
     });
-    
+
     if (!device) {
       return res.status(404).json({ message: 'Device not found' });
     }
-    
+
     await device.updateBattery(batteryLevel, batteryVoltage);
-    
+
     res.json({
       message: 'Battery level updated',
       batteryLevel: device.batteryLevel,
@@ -183,9 +183,9 @@ router.put('/:id/battery', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Update battery error:', error);
-    res.status(500).json({ 
-      message: 'Error updating battery', 
-      error: error.message 
+    res.status(500).json({
+      message: 'Error updating battery',
+      error: error.message
     });
   }
 });
@@ -199,13 +199,13 @@ router.put('/:id/heartbeat', requireAuth, async (req, res) => {
       _id: req.params.id,
       userId: req.user._id
     });
-    
+
     if (!device) {
       return res.status(404).json({ message: 'Device not found' });
     }
-    
+
     await device.updateLastSeen();
-    
+
     res.json({
       message: 'Device heartbeat updated',
       lastSeen: device.lastSeen,
@@ -213,9 +213,9 @@ router.put('/:id/heartbeat', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Update heartbeat error:', error);
-    res.status(500).json({ 
-      message: 'Error updating heartbeat', 
-      error: error.message 
+    res.status(500).json({
+      message: 'Error updating heartbeat',
+      error: error.message
     });
   }
 });
@@ -229,23 +229,23 @@ router.delete('/:id/unpair', requireAuth, async (req, res) => {
       _id: req.params.id,
       userId: req.user._id
     });
-    
+
     if (!device) {
       return res.status(404).json({ message: 'Device not found' });
     }
-    
+
     device.isActive = false;
     await device.save();
-    
+
     res.json({
       message: 'Device unpaired successfully',
       deviceId: device.deviceId
     });
   } catch (error) {
     console.error('Unpair device error:', error);
-    res.status(500).json({ 
-      message: 'Error unpairing device', 
-      error: error.message 
+    res.status(500).json({
+      message: 'Error unpairing device',
+      error: error.message
     });
   }
 });
@@ -255,36 +255,36 @@ router.delete('/:id/unpair', requireAuth, async (req, res) => {
 // @access  Private (Admin)
 router.get('/', requireAuth, requireRoles('super_admin', 'admin'), async (req, res) => {
   try {
-    const { 
-      page = 1, 
-      limit = 50, 
-      status = 'all', 
+    const {
+      page = 1,
+      limit = 50,
+      status = 'all',
       batteryLevel = 'all',
       search = ''
     } = req.query;
-    
+
     // Build query
     const query = {};
-    
+
     if (status === 'active') {
       query.isActive = true;
     } else if (status === 'inactive') {
       query.isActive = false;
     }
-    
+
     if (batteryLevel === 'low') {
       query.batteryLevel = { $lt: 20 };
     } else if (batteryLevel === 'critical') {
       query.batteryLevel = { $lt: 10 };
     }
-    
+
     if (search) {
       query.$or = [
         { deviceId: { $regex: search, $options: 'i' } },
         { hardwareModel: { $regex: search, $options: 'i' } }
       ];
     }
-    
+
     const total = await Device.countDocuments(query);
     const devices = await Device.find(query)
       .populate('userId', 'name email rollNumber role')
@@ -292,7 +292,7 @@ router.get('/', requireAuth, requireRoles('super_admin', 'admin'), async (req, r
       .sort({ lastSeen: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
-    
+
     res.json({
       devices,
       totalPages: Math.ceil(total / limit),
@@ -301,9 +301,9 @@ router.get('/', requireAuth, requireRoles('super_admin', 'admin'), async (req, r
     });
   } catch (error) {
     console.error('Get devices error:', error);
-    res.status(500).json({ 
-      message: 'Error fetching devices', 
-      error: error.message 
+    res.status(500).json({
+      message: 'Error fetching devices',
+      error: error.message
     });
   }
 });
@@ -314,9 +314,9 @@ router.get('/', requireAuth, requireRoles('super_admin', 'admin'), async (req, r
 router.get('/offline', requireAuth, requireRoles('super_admin', 'admin', 'faculty'), async (req, res) => {
   try {
     const { hours = 24 } = req.query;
-    
+
     const offlineDevices = await Device.findOfflineDevices(parseInt(hours));
-    
+
     res.json({
       devices: offlineDevices,
       count: offlineDevices.length,
@@ -324,9 +324,9 @@ router.get('/offline', requireAuth, requireRoles('super_admin', 'admin', 'facult
     });
   } catch (error) {
     console.error('Get offline devices error:', error);
-    res.status(500).json({ 
-      message: 'Error fetching offline devices', 
-      error: error.message 
+    res.status(500).json({
+      message: 'Error fetching offline devices',
+      error: error.message
     });
   }
 });
@@ -337,9 +337,9 @@ router.get('/offline', requireAuth, requireRoles('super_admin', 'admin', 'facult
 router.get('/low-battery', requireAuth, requireRoles('super_admin', 'admin', 'faculty'), async (req, res) => {
   try {
     const { threshold = 20 } = req.query;
-    
+
     const lowBatteryDevices = await Device.findLowBatteryDevices(parseInt(threshold));
-    
+
     res.json({
       devices: lowBatteryDevices,
       count: lowBatteryDevices.length,
@@ -347,9 +347,9 @@ router.get('/low-battery', requireAuth, requireRoles('super_admin', 'admin', 'fa
     });
   } catch (error) {
     console.error('Get low battery devices error:', error);
-    res.status(500).json({ 
-      message: 'Error fetching low battery devices', 
-      error: error.message 
+    res.status(500).json({
+      message: 'Error fetching low battery devices',
+      error: error.message
     });
   }
 });
@@ -360,19 +360,19 @@ router.get('/low-battery', requireAuth, requireRoles('super_admin', 'admin', 'fa
 router.get('/stats', requireAuth, requireRoles('super_admin', 'admin'), async (req, res) => {
   try {
     const total = await Device.countDocuments({ isActive: true });
-    const online = await Device.countDocuments({ 
-      isActive: true, 
-      isOnline: true 
+    const online = await Device.countDocuments({
+      isActive: true,
+      isOnline: true
     });
-    const lowBattery = await Device.countDocuments({ 
-      isActive: true, 
-      batteryLevel: { $lt: 20 } 
+    const lowBattery = await Device.countDocuments({
+      isActive: true,
+      batteryLevel: { $lt: 20 }
     });
-    const suspended = await Device.countDocuments({ 
-      isActive: true, 
-      isSuspended: true 
+    const suspended = await Device.countDocuments({
+      isActive: true,
+      isSuspended: true
     });
-    
+
     // Average battery level
     const avgBatteryResult = await Device.aggregate([
       { $match: { isActive: true } },
@@ -383,11 +383,11 @@ router.get('/stats', requireAuth, requireRoles('super_admin', 'admin'), async (r
         }
       }
     ]);
-    
-    const avgBattery = avgBatteryResult.length > 0 
-      ? Math.round(avgBatteryResult[0].avgBattery) 
+
+    const avgBattery = avgBatteryResult.length > 0
+      ? Math.round(avgBatteryResult[0].avgBattery)
       : 0;
-    
+
     // Hardware model distribution
     const modelDistribution = await Device.aggregate([
       { $match: { isActive: true } },
@@ -399,7 +399,7 @@ router.get('/stats', requireAuth, requireRoles('super_admin', 'admin'), async (r
       },
       { $sort: { count: -1 } }
     ]);
-    
+
     res.json({
       stats: {
         total,
@@ -413,9 +413,9 @@ router.get('/stats', requireAuth, requireRoles('super_admin', 'admin'), async (r
     });
   } catch (error) {
     console.error('Get device stats error:', error);
-    res.status(500).json({ 
-      message: 'Error fetching device statistics', 
-      error: error.message 
+    res.status(500).json({
+      message: 'Error fetching device statistics',
+      error: error.message
     });
   }
 });
@@ -426,17 +426,17 @@ router.get('/stats', requireAuth, requireRoles('super_admin', 'admin'), async (r
 router.put('/:id/suspend', requireAuth, requireRoles('super_admin', 'admin'), async (req, res) => {
   try {
     const { reason } = req.body;
-    
+
     const device = await Device.findById(req.params.id);
-    
+
     if (!device) {
       return res.status(404).json({ message: 'Device not found' });
     }
-    
+
     device.isSuspended = true;
     device.suspensionReason = reason || 'Suspicious activity detected';
     await device.save();
-    
+
     res.json({
       message: 'Device suspended successfully',
       device: {
@@ -447,9 +447,9 @@ router.put('/:id/suspend', requireAuth, requireRoles('super_admin', 'admin'), as
     });
   } catch (error) {
     console.error('Suspend device error:', error);
-    res.status(500).json({ 
-      message: 'Error suspending device', 
-      error: error.message 
+    res.status(500).json({
+      message: 'Error suspending device',
+      error: error.message
     });
   }
 });
@@ -460,16 +460,16 @@ router.put('/:id/suspend', requireAuth, requireRoles('super_admin', 'admin'), as
 router.put('/:id/unsuspend', requireAuth, requireRoles('super_admin', 'admin'), async (req, res) => {
   try {
     const device = await Device.findById(req.params.id);
-    
+
     if (!device) {
       return res.status(404).json({ message: 'Device not found' });
     }
-    
+
     device.isSuspended = false;
     device.suspensionReason = null;
     device.suspiciousActivityCount = 0; // Reset counter
     await device.save();
-    
+
     res.json({
       message: 'Device unsuspended successfully',
       device: {
@@ -479,9 +479,9 @@ router.put('/:id/unsuspend', requireAuth, requireRoles('super_admin', 'admin'), 
     });
   } catch (error) {
     console.error('Unsuspend device error:', error);
-    res.status(500).json({ 
-      message: 'Error unsuspending device', 
-      error: error.message 
+    res.status(500).json({
+      message: 'Error unsuspending device',
+      error: error.message
     });
   }
 });

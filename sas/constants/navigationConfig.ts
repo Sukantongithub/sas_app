@@ -70,6 +70,7 @@ export const TAB_NAVIGATION: RoleNavConfig = {
     useAdminLayout: true,
     sidebar: [
       { name: 'Dashboard', path: '/admin', icon: 'house.fill' },
+      { name: 'Classes', path: '/admin/classes', icon: 'rectangle.stack.badge.plus' },
       { name: 'Students', path: '/admin/management/students', icon: 'person.2.fill'},
       { name: 'Staff', path: '/admin/management/staff', icon: 'person.3.fill' },
       { name: 'Analytics', path: '/admin/analytics', icon: 'chart.pie.fill' },
@@ -81,6 +82,7 @@ export const TAB_NAVIGATION: RoleNavConfig = {
     useAdminLayout: true,
     sidebar: [
       { name: 'Dashboard', path: '/admin', icon: 'house.fill' },
+      { name: 'Classes', path: '/admin/classes', icon: 'rectangle.stack.badge.plus' },
       { name: 'Students', path: '/admin/management/students', icon: 'person.2.fill', group: 'Students' },
       { name: 'Staff', path: '/admin/management/staff', icon: 'person.3.fill', group: 'Staffs' },
       { name: 'Analytics', path: '/admin/analytics', icon: 'chart.pie.fill' },

@@ -497,4 +497,142 @@ router.get('/:teacherId/leave-summary', requireAuth, requireSelfOrRoles({ roles:
   sendSuccess(res, result, 200, 'Leave summary retrieved');
 }));
 
+// ============================================================================
+// TIMETABLE MANAGEMENT (Staff / HOD)
+// ============================================================================
+
+// @route   GET /api/teachers/timetable/my-classes
+// @desc    Get list of classes assigned to the logged-in teacher
+// @access  Private (Staff, HOD, Admin)
+router.get('/timetable/my-classes', requireAuth, requireRoles('staff', 'hod', 'super_admin', 'admin'), asyncHandler(async (req, res) => {
+  // Return ALL active classes so staff can manage timetables for any class
+  const classes = await Class.find({ isActive: true })
+    .select('name code department semester section students faculty')
+    .sort({ name: 1 });
+
+  sendSuccess(res, classes, 200, 'Classes retrieved successfully');
+}));
+
+// @route   GET /api/teachers/timetable/class/:classId
+// @desc    Get full weekly timetable for a specific class
+// @access  Private (Staff, HOD, Admin)
+router.get('/timetable/class/:classId', requireAuth, asyncHandler(async (req, res) => {
+  const timetableEntries = await Timetable.find({
+    classId: req.params.classId,
+    isActive: true
+  }).sort({ dayOfWeek: 1, 'periods.periodNumber': 1 });
+
+  const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const weekly = {};
+  days.forEach(d => { weekly[d] = []; });
+
+  timetableEntries.forEach(entry => {
+    entry.periods.forEach(period => {
+      weekly[entry.dayOfWeek].push({
+        timetableId: entry._id,
+        dayOfWeek: entry.dayOfWeek,
+        periodNumber: period.periodNumber,
+        subject: period.subject,
+        startTime: period.startTime,
+        endTime: period.endTime,
+        room: period.room,
+        isLab: period.isLab
+      });
+    });
+    // sort periods within day
+    weekly[entry.dayOfWeek].sort((a, b) => a.periodNumber - b.periodNumber);
+  });
+
+  sendSuccess(res, { timetable: weekly, entries: timetableEntries }, 200, 'Class timetable retrieved');
+}));
+
+// @route   GET /api/teachers/timetable/:teacherId
+// @desc    Get teacher's full weekly timetable (across all classes)
+// @access  Private (Teacher, Admin)
+router.get('/timetable/:teacherId', requireAuth, asyncHandler(async (req, res) => {
+  const timetableEntries = await Timetable.find({
+    'periods.teacherId': req.params.teacherId,
+    isActive: true
+  })
+    .populate('classId', 'name code department semester')
+    .sort({ dayOfWeek: 1 });
+
+  sendSuccess(res, timetableEntries, 200, 'Teacher timetable retrieved');
+}));
+
+// @route   POST /api/teachers/timetable
+// @desc    Create or upsert a timetable entry for a class/day
+// @access  Private (Staff, HOD, Admin)
+router.post('/timetable', requireAuth, requireRoles('staff', 'hod', 'super_admin', 'admin'), asyncHandler(async (req, res) => {
+  const { classId, section, dayOfWeek, periods } = req.body;
+
+  if (!classId || !dayOfWeek || !periods || !Array.isArray(periods) || periods.length === 0) {
+    return res.status(400).json({ message: 'classId, dayOfWeek, and periods[] are required' });
+  }
+
+  // Validate periods
+  for (const p of periods) {
+    if (!p.subject || !p.startTime || !p.endTime || p.periodNumber == null) {
+      return res.status(400).json({ message: 'Each period must have periodNumber, subject, startTime, endTime' });
+    }
+  }
+
+  const query = { classId, dayOfWeek };
+  if (section) query.section = section;
+
+  let entry = await Timetable.findOne(query);
+
+  if (entry) {
+    entry.periods = periods;
+    entry.updatedAt = Date.now();
+  } else {
+    entry = new Timetable({
+      classId,
+      section,
+      dayOfWeek,
+      periods,
+      createdBy: req.user._id
+    });
+  }
+
+  await entry.save();
+  sendSuccess(res, entry, 201, 'Timetable saved successfully');
+}));
+
+// @route   PUT /api/teachers/timetable/:timetableId
+// @desc    Update a timetable entry (replace all periods for that day)
+// @access  Private (Staff, HOD, Admin)
+router.put('/timetable/:timetableId', requireAuth, requireRoles('staff', 'hod', 'super_admin', 'admin'), asyncHandler(async (req, res) => {
+  const { periods, section } = req.body;
+
+  const entry = await findOrFail(Timetable, req.params.timetableId);
+
+  if (periods && Array.isArray(periods)) {
+    // Validate
+    for (const p of periods) {
+      if (!p.subject || !p.startTime || !p.endTime || p.periodNumber == null) {
+        return res.status(400).json({ message: 'Each period must have periodNumber, subject, startTime, endTime' });
+      }
+    }
+    entry.periods = periods;
+  }
+  if (section !== undefined) entry.section = section;
+  entry.updatedAt = Date.now();
+
+  await entry.save();
+  sendSuccess(res, entry, 200, 'Timetable updated successfully');
+}));
+
+// @route   DELETE /api/teachers/timetable/:timetableId
+// @desc    Soft-delete (deactivate) a timetable entry
+// @access  Private (Staff, HOD, Admin)
+router.delete('/timetable/:timetableId', requireAuth, requireRoles('staff', 'hod', 'super_admin', 'admin'), asyncHandler(async (req, res) => {
+  const entry = await findOrFail(Timetable, req.params.timetableId);
+  entry.isActive = false;
+  entry.updatedAt = Date.now();
+  await entry.save();
+  sendSuccess(res, {}, 200, 'Timetable entry deleted');
+}));
+
 module.exports = router;
+
