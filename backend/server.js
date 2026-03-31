@@ -23,6 +23,7 @@ const studentInteractionsRoutes = require('./routes/student-interactions');
 const teacherRoutes = require('./routes/teachers');
 const messageRoutes = require('./routes/messages');
 const studentManagementRoutes = require('./routes/student-management');
+const hardwareRoutes = require('./routes/hardware');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -54,6 +55,7 @@ app.use('/api/student-interactions', studentInteractionsRoutes);
 app.use('/api/teachers', teacherRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/student-management', studentManagementRoutes);
+app.use('/api/hardware', hardwareRoutes);
 app.set('trust proxy', 1);
 // Health
 app.get('/api/health', (req, res) => {

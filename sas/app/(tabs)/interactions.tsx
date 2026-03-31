@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { StyleSheet, FlatList, View, TouchableOpacity, TextInput, Alert, ActivityIndicator, RefreshControl } from 'react-native';
+import { StyleSheet, FlatList, View, TouchableOpacity, TextInput, Alert, ActivityIndicator, RefreshControl, Modal, DatePickerIOS, Platform, ScrollView } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -43,7 +43,130 @@ export default function StudentInteractionsScreen() {
   });
   const [onDutyRequests, setOnDutyRequests] = useState<any[]>([]);
 
-  const studentId = user?.id;
+  // Date Picker State
+  const [showLeaveStartDatePicker, setShowLeaveStartDatePicker] = useState(false);
+  const [showLeaveEndDatePicker, setShowLeaveEndDatePicker] = useState(false);
+  const [showOnDutyStartDatePicker, setShowOnDutyStartDatePicker] = useState(false);
+  const [showOnDutyEndDatePicker, setShowOnDutyEndDatePicker] = useState(false);
+  const [tempLeaveStartDate, setTempLeaveStartDate] = useState(new Date());
+  const [tempLeaveEndDate, setTempLeaveEndDate] = useState(new Date());
+  const [tempOnDutyStartDate, setTempOnDutyStartDate] = useState(new Date());
+  const [tempOnDutyEndDate, setTempOnDutyEndDate] = useState(new Date());
+
+  const studentId = user?.studentId || user?.id;
+
+  // Helper function to format date for display
+  const formatDateForDisplay = (dateString: string) => {
+    if (!dateString) return 'Select Date';
+    try {
+      const date = new Date(dateString + 'T00:00:00');
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch {
+      return dateString;
+    }
+  };
+
+  // Helper function to format date for API (YYYY-MM-DD)
+  const formatDateForAPI = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Component for rendering date picker based on platform
+  const DatePickerModal = ({ 
+    visible, 
+    onClose, 
+    onDateSelect, 
+    tempDate, 
+    setTempDate, 
+    title 
+  }: any) => {
+    if (Platform.OS === 'web') {
+      return (
+        <Modal
+          transparent
+          animationType="fade"
+          visible={visible}
+          onRequestClose={onClose}>
+          <View style={styles.datePickerContainer}>
+            <View style={[styles.datePickerHeader, { backgroundColor: Colors[colorScheme ?? 'light'].card }]}>
+              <TouchableOpacity onPress={onClose}>
+                <ThemedText style={styles.datePickerHeaderButton}>Cancel</ThemedText>
+              </TouchableOpacity>
+              <ThemedText style={styles.datePickerTitle}>{title}</ThemedText>
+              <TouchableOpacity
+                onPress={() => {
+                  onDateSelect(formatDateForAPI(tempDate));
+                  onClose();
+                }}>
+                <ThemedText style={[styles.datePickerHeaderButton, { color: Colors[colorScheme ?? 'light'].tint }]}>Done</ThemedText>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.webDatePickerContent}>
+              <ThemedText style={styles.webDatePickerLabel}>Select a date:</ThemedText>
+              <input
+                type="date"
+                value={formatDateForAPI(tempDate)}
+                onChange={(e: any) => {
+                  if (e.target.value) {
+                    const [year, month, day] = e.target.value.split('-');
+                    const newDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                    setTempDate(newDate);
+                  }
+                }}
+                style={{
+                  fontSize: 18,
+                  padding: '12px 16px',
+                  borderWidth: 2,
+                  borderColor: Colors[colorScheme ?? 'light'].tint,
+                  borderRadius: 8,
+                  marginHorizontal: 20,
+                  marginVertical: 20,
+                  textAlign: 'center',
+                  fontFamily: 'inherit',
+                  backgroundColor: Colors[colorScheme ?? 'light'].background,
+                  color: Colors[colorScheme ?? 'light'].text,
+                  cursor: 'pointer',
+                } as any}
+              />
+            </View>
+          </View>
+        </Modal>
+      );
+    }
+
+    // Native date picker
+    return (
+      <Modal
+        transparent
+        animationType="slide"
+        visible={visible}
+        onRequestClose={onClose}>
+        <View style={styles.datePickerContainer}>
+          <View style={styles.datePickerHeader}>
+            <TouchableOpacity onPress={onClose}>
+              <ThemedText style={styles.datePickerHeaderButton}>Cancel</ThemedText>
+            </TouchableOpacity>
+            <ThemedText style={styles.datePickerTitle}>{title}</ThemedText>
+            <TouchableOpacity
+              onPress={() => {
+                onDateSelect(formatDateForAPI(tempDate));
+                onClose();
+              }}>
+              <ThemedText style={[styles.datePickerHeaderButton, { color: Colors[colorScheme ?? 'light'].tint }]}>Done</ThemedText>
+            </TouchableOpacity>
+          </View>
+          <DatePickerIOS
+            date={tempDate}
+            onDateChange={setTempDate}
+            mode="date"
+          />
+        </View>
+      </Modal>
+    );
+  };
 
   useEffect(() => {
     if (studentId && token) {
@@ -57,24 +180,39 @@ export default function StudentInteractionsScreen() {
     setLoading(true);
     try {
       switch (activeTab) {
-        case 'leave':
-          const leavesData = await studentInteractionsAPI.getLeaves(studentId, undefined, token);
-          setLeaves(leavesData);
+        case 'leave': {
+          const data = await studentInteractionsAPI.getLeaves(studentId, undefined, token);
+          setLeaves(Array.isArray(data) ? data : []);
           break;
-        case 'absence':
-          const reasonsData = await studentInteractionsAPI.getAbsenceReasons(studentId, {}, token);
-          setAbsenceReasons(reasonsData);
+        }
+        case 'absence': {
+          const data = await studentInteractionsAPI.getAbsenceReasons(studentId, {}, token);
+          setAbsenceReasons(Array.isArray(data) ? data : []);
           break;
-        case 'eligibility':
+        }
+        case 'eligibility': {
+          // getExamEligibility already normalises response to flat shape
           const eligData = await studentInteractionsAPI.getExamEligibility(studentId, {}, token);
           setEligibility(eligData);
-          const lowAttData = await studentInteractionsAPI.checkLowAttendance(studentId, token);
-          setLowAttendanceInfo(lowAttData);
+          // ✓ FIX: Only check low attendance if user is a student (has valid studentId)
+          if (user?.role === 'student' && studentId) {
+            try {
+              const lowData = await studentInteractionsAPI.checkLowAttendance(studentId, token);
+              setLowAttendanceInfo(lowData);
+            } catch (lowAttError: any) {
+              console.warn('Could not fetch low attendance info:', lowAttError?.message || lowAttError);
+              setLowAttendanceInfo(null);
+            }
+          } else {
+            setLowAttendanceInfo(null);
+          }
           break;
-        case 'on-duty':
-          const onDutyData = await studentInteractionsAPI.getOnDutyRequests(studentId, undefined, token);
-          setOnDutyRequests(onDutyData.onDutyRequests || []);
+        }
+        case 'on-duty': {
+          const data = await studentInteractionsAPI.getOnDutyRequests(studentId, undefined, token);
+          setOnDutyRequests(data?.onDutyRequests ?? (Array.isArray(data) ? data : []));
           break;
+        }
       }
     } catch (error: any) {
       console.error('Error fetching data:', error);
@@ -147,22 +285,36 @@ export default function StudentInteractionsScreen() {
         
         <View style={styles.formGroup}>
           <ThemedText style={styles.label}>Start Date *</ThemedText>
-          <TextInput
-            style={styles.input}
-            placeholder="YYYY-MM-DD"
-            value={leaveForm.startDate}
-            onChangeText={(text) => setLeaveForm({ ...leaveForm, startDate: text })}
-          />
+          <TouchableOpacity
+            style={styles.datePickerButton}
+            onPress={() => {
+              if (leaveForm.startDate) {
+                setTempLeaveStartDate(new Date(leaveForm.startDate + 'T00:00:00'));
+              }
+              setShowLeaveStartDatePicker(true);
+            }}>
+            <ThemedText style={styles.datePickerButtonText}>
+              {formatDateForDisplay(leaveForm.startDate)}
+            </ThemedText>
+            <IconSymbol name="calendar" size={20} color={Colors[colorScheme ?? 'light'].tint} />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.formGroup}>
           <ThemedText style={styles.label}>End Date *</ThemedText>
-          <TextInput
-            style={styles.input}
-            placeholder="YYYY-MM-DD"
-            value={leaveForm.endDate}
-            onChangeText={(text) => setLeaveForm({ ...leaveForm, endDate: text })}
-          />
+          <TouchableOpacity
+            style={styles.datePickerButton}
+            onPress={() => {
+              if (leaveForm.endDate) {
+                setTempLeaveEndDate(new Date(leaveForm.endDate + 'T00:00:00'));
+              }
+              setShowLeaveEndDatePicker(true);
+            }}>
+            <ThemedText style={styles.datePickerButtonText}>
+              {formatDateForDisplay(leaveForm.endDate)}
+            </ThemedText>
+            <IconSymbol name="calendar" size={20} color={Colors[colorScheme ?? 'light'].tint} />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.formGroup}>
@@ -273,7 +425,7 @@ export default function StudentInteractionsScreen() {
           <ThemedText style={styles.alertMessage}>{lowAttendanceInfo.message}</ThemedText>
           <View style={styles.alertStats}>
             <View style={styles.alertStat}>
-              <ThemedText style={styles.alertStatNumber}>{lowAttendanceInfo.percentage.toFixed(1)}%</ThemedText>
+              <ThemedText style={styles.alertStatNumber}>{(lowAttendanceInfo.percentage ?? 0).toFixed(1)}%</ThemedText>
               <ThemedText style={styles.alertStatLabel}>Your Attendance</ThemedText>
             </View>
             <View style={styles.alertStat}>
@@ -307,26 +459,26 @@ export default function StudentInteractionsScreen() {
 
           <View style={styles.eligibilityGrid}>
             <View style={styles.eligibilityStat}>
-              <ThemedText style={styles.eligibilityNumber}>{eligibility.currentPercentage}%</ThemedText>
+              <ThemedText style={styles.eligibilityNumber}>{eligibility.currentPercentage ?? 0}%</ThemedText>
               <ThemedText style={styles.eligibilityLabel}>Your Attendance</ThemedText>
             </View>
             <View style={styles.eligibilityStat}>
-              <ThemedText style={styles.eligibilityNumber}>{eligibility.requiredPercentage}%</ThemedText>
+              <ThemedText style={styles.eligibilityNumber}>{eligibility.requiredPercentage ?? 75}%</ThemedText>
               <ThemedText style={styles.eligibilityLabel}>Required</ThemedText>
             </View>
             <View style={styles.eligibilityStat}>
-              <ThemedText style={styles.eligibilityNumber}>{eligibility.totalClasses}</ThemedText>
+              <ThemedText style={styles.eligibilityNumber}>{eligibility.totalClasses ?? 0}</ThemedText>
               <ThemedText style={styles.eligibilityLabel}>Total Classes</ThemedText>
             </View>
             <View style={styles.eligibilityStat}>
-              <ThemedText style={styles.eligibilityNumber}>{eligibility.presentCount}</ThemedText>
+              <ThemedText style={styles.eligibilityNumber}>{eligibility.presentCount ?? 0}</ThemedText>
               <ThemedText style={styles.eligibilityLabel}>Present</ThemedText>
             </View>
           </View>
 
           <ThemedText style={styles.eligibilityMessage}>{eligibility.message}</ThemedText>
 
-          {!eligibility.isEligible && eligibility.classesNeeded > 0 && (
+          {!eligibility.isEligible && (eligibility.classesNeeded ?? 0) > 0 && (
             <View style={styles.improvementTip}>
               <IconSymbol name="lightbulb.fill" size={20} color="#FF9800" />
               <ThemedText style={styles.improvementText}>
@@ -346,22 +498,36 @@ export default function StudentInteractionsScreen() {
         
         <View style={styles.formGroup}>
           <ThemedText style={styles.label}>Start Date *</ThemedText>
-          <TextInput
-            style={styles.input}
-            placeholder="YYYY-MM-DD"
-            value={onDutyForm.startDate}
-            onChangeText={(text) => setOnDutyForm({ ...onDutyForm, startDate: text })}
-          />
+          <TouchableOpacity
+            style={styles.datePickerButton}
+            onPress={() => {
+              if (onDutyForm.startDate) {
+                setTempOnDutyStartDate(new Date(onDutyForm.startDate + 'T00:00:00'));
+              }
+              setShowOnDutyStartDatePicker(true);
+            }}>
+            <ThemedText style={styles.datePickerButtonText}>
+              {formatDateForDisplay(onDutyForm.startDate)}
+            </ThemedText>
+            <IconSymbol name="calendar" size={20} color={Colors[colorScheme ?? 'light'].tint} />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.formGroup}>
           <ThemedText style={styles.label}>End Date *</ThemedText>
-          <TextInput
-            style={styles.input}
-            placeholder="YYYY-MM-DD"
-            value={onDutyForm.endDate}
-            onChangeText={(text) => setOnDutyForm({ ...onDutyForm, endDate: text })}
-          />
+          <TouchableOpacity
+            style={styles.datePickerButton}
+            onPress={() => {
+              if (onDutyForm.endDate) {
+                setTempOnDutyEndDate(new Date(onDutyForm.endDate + 'T00:00:00'));
+              }
+              setShowOnDutyEndDatePicker(true);
+            }}>
+            <ThemedText style={styles.datePickerButtonText}>
+              {formatDateForDisplay(onDutyForm.endDate)}
+            </ThemedText>
+            <IconSymbol name="calendar" size={20} color={Colors[colorScheme ?? 'light'].tint} />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.formGroup}>
@@ -495,13 +661,60 @@ export default function StudentInteractionsScreen() {
           <ActivityIndicator size="large" color={Colors[colorScheme ?? 'light'].tint} />
         </View>
       ) : (
-        <>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: 32 }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+        >
           {activeTab === 'leave' && renderLeaveTab()}
           {activeTab === 'absence' && renderAbsenceTab()}
           {activeTab === 'eligibility' && renderEligibilityTab()}
           {activeTab === 'on-duty' && renderOnDutyTab()}
-        </>
+        </ScrollView>
       )}
+
+      {/* Leave Start Date Picker */}
+      <DatePickerModal
+        visible={showLeaveStartDatePicker}
+        onClose={() => setShowLeaveStartDatePicker(false)}
+        onDateSelect={(date) => setLeaveForm({ ...leaveForm, startDate: date })}
+        tempDate={tempLeaveStartDate}
+        setTempDate={setTempLeaveStartDate}
+        title="Select Start Date"
+      />
+
+      {/* Leave End Date Picker */}
+      <DatePickerModal
+        visible={showLeaveEndDatePicker}
+        onClose={() => setShowLeaveEndDatePicker(false)}
+        onDateSelect={(date) => setLeaveForm({ ...leaveForm, endDate: date })}
+        tempDate={tempLeaveEndDate}
+        setTempDate={setTempLeaveEndDate}
+        title="Select End Date"
+      />
+
+      {/* On-Duty Start Date Picker */}
+      <DatePickerModal
+        visible={showOnDutyStartDatePicker}
+        onClose={() => setShowOnDutyStartDatePicker(false)}
+        onDateSelect={(date) => setOnDutyForm({ ...onDutyForm, startDate: date })}
+        tempDate={tempOnDutyStartDate}
+        setTempDate={setTempOnDutyStartDate}
+        title="Select Start Date"
+      />
+
+      {/* On-Duty End Date Picker */}
+      <DatePickerModal
+        visible={showOnDutyEndDatePicker}
+        onClose={() => setShowOnDutyEndDatePicker(false)}
+        onDateSelect={(date) => setOnDutyForm({ ...onDutyForm, endDate: date })}
+        tempDate={tempOnDutyEndDate}
+        setTempDate={setTempOnDutyEndDate}
+        title="Select End Date"
+      />
     </ThemedView>
   );
 }
@@ -797,4 +1010,73 @@ const styles = StyleSheet.create({
     opacity: 0.6,
     marginTop: 8,
   },
+  datePickerButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
+    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+  },
+  datePickerButtonText: {
+    fontSize: 14,
+    flex: 1,
+  },
+  datePickerContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  datePickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#f5f5f5',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  datePickerTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  datePickerHeaderButton: {
+    fontSize: 14,
+    fontWeight: '500',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  webDateInput: {
+    fontSize: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderWidth: 2,
+    borderRadius: 8,
+    marginHorizontal: 20,
+    marginVertical: 20,
+    textAlign: 'center',
+  },
+  webDatePickerContent: {
+    flex: 1,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  webDatePickerLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  webDatePickerHint: {
+    fontSize: 12,
+    opacity: 0.6,
+    marginTop: 12,
+    textAlign: 'center',
+  },
 });
+

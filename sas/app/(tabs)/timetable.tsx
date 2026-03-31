@@ -118,10 +118,19 @@ export default function TimetableScreen() {
     if (!user?.id || !token) return;
     setLoading(true);
     try {
+      // Pass user ID - backend will handle both Student._id and User._id lookups
       const data = await attendanceAPI.getStudentTimetable(user.id, token);
-      setStudentTimetable(data);
-    } catch (err) {
+      if (data && data.timetable) {
+        setStudentTimetable(data);
+      } else {
+        console.warn('No timetable data received:', data);
+      }
+    } catch (err: any) {
       console.error('Error fetching student timetable:', err);
+      // If student not found, it might be that the student profile hasn't been created yet
+      if (err?.response?.status === 404) {
+        console.warn('Student profile not found. Make sure you are logged in as a student.');
+      }
     } finally {
       setLoading(false);
     }
@@ -366,12 +375,18 @@ export default function TimetableScreen() {
                           }]}
                         >
                           <View style={styles.periodInfo}>
-                            <ThemedText style={styles.period}>Period {classItem.period}</ThemedText>
+                            <ThemedText style={styles.period}>Period {classItem.periodNumber || classItem.period}</ThemedText>
                             <ThemedText type="defaultSemiBold" style={styles.subject}>
-                              {classItem.subjectId?.name || 'Subject'}
+                              {classItem.subject || 'Subject'}
                             </ThemedText>
-                            {classItem.subjectId?.code && (
-                              <ThemedText style={styles.code}>Code: {classItem.subjectId.code}</ThemedText>
+                            {classItem.startTime && classItem.endTime && (
+                              <ThemedText style={styles.code}>{classItem.startTime} - {classItem.endTime}</ThemedText>
+                            )}
+                            {classItem.room && (
+                              <ThemedText style={styles.code}>Room: {classItem.room}</ThemedText>
+                            )}
+                            {classItem.isLab && (
+                              <ThemedText style={[styles.code, { color: '#FF9800' }]}>🔬 Lab Class</ThemedText>
                             )}
                           </View>
                         </View>

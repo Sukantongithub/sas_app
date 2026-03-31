@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   FlatList,
   Modal,
+  Pressable,
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -38,21 +39,37 @@ interface Student {
   };
 }
 
+interface Class {
+  _id: string;
+  name: string;
+  code: string;
+  department: string;
+  semester: number;
+}
+
 export default function StudentsManagementScreen() {
   const colorScheme = useColorScheme();
   const router = useRouter();
   const { token, user } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
+  const [classes, setClasses] = useState<Class[]>([]);
   const [loading, setLoading] = useState(true);
+  const [classesLoading, setClassesLoading] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [showFormatModal, setShowFormatModal] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [showClassPicker, setShowClassPicker] = useState(false);
   const [importMessage, setImportMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     rollNumber: '',
     email: '',
     class: '',
+    phone: '',
+    parentName: '',
+    parentPhone: '',
+    parentEmail: '',
+    parentRelation: 'guardian',
   });
 
   const showImportBanner = (type: 'success' | 'error', text: string) => {
@@ -63,6 +80,13 @@ export default function StudentsManagementScreen() {
   useEffect(() => {
     fetchStudents();
   }, [token]);
+
+  useEffect(() => {
+    // Fetch classes when form is opened
+    if (showForm && classes.length === 0) {
+      fetchClasses();
+    }
+  }, [showForm]);
 
   const fetchStudents = async () => {
     try {
@@ -82,13 +106,39 @@ export default function StudentsManagementScreen() {
     }
   };
 
+  const fetchClasses = async () => {
+    try {
+      setClassesLoading(true);
+      const response = await fetch(`${API_BASE_URL}/admin/classes`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) throw new Error('Failed to fetch classes');
+
+      const result = await response.json();
+      setClasses(result.data || []);
+    } catch (error: any) {
+      console.error('Error fetching classes:', error);
+      Alert.alert('Error', error.message || 'Failed to load classes');
+    } finally {
+      setClassesLoading(false);
+    }
+  };
+
   const handleCreateStudent = async () => {
     if (!formData.name || !formData.rollNumber || !formData.email || !formData.class) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert('Error', 'Please fill in all required student fields');
+      return;
+    }
+
+    if (!formData.parentName || !formData.parentPhone) {
+      Alert.alert('Error', 'Please fill in all required parent fields (Name & Phone)');
       return;
     }
 
     try {
+      console.log('📤 Sending student data:', JSON.stringify(formData, null, 2));
+
       const response = await fetch(`${API_BASE_URL}/admin/students`, {
         method: 'POST',
         headers: {
@@ -98,13 +148,42 @@ export default function StudentsManagementScreen() {
         body: JSON.stringify(formData),
       });
 
-      if (!response.ok) throw new Error('Failed to create student');
+      const responseData = await response.json();
+      console.log('📥 Response status:', response.status);
+      console.log('📥 Response data:', responseData);
 
-      Alert.alert('Success', 'Student created successfully');
-      setFormData({ name: '', rollNumber: '', email: '', class: '' });
+      if (!response.ok) {
+        throw new Error(responseData.message || 'Failed to create student');
+      }
+
+      const result = responseData;
+      
+      const studentCredentials = result.data.student.loginCredentials 
+        ? `\n\n📚 STUDENT LOGIN:\nEmail: ${result.data.student.loginCredentials.email}\nPassword: ${result.data.student.loginCredentials.defaultPassword}`
+        : '';
+
+      const parentCredentials = `\n\n👨‍👩‍👧 PARENT LOGIN:\nEmail: ${result.data.parent.email}\nPassword: ${result.data.parent.defaultPassword}`;
+
+      Alert.alert(
+        'Success ✅',
+        `Student "${formData.name}" created!\n${studentCredentials}${parentCredentials}\n\nPlease share these credentials with the respective users.`
+      );
+      
+      setFormData({ 
+        name: '', 
+        rollNumber: '', 
+        email: '', 
+        class: '',
+        phone: '',
+        parentName: '',
+        parentPhone: '',
+        parentEmail: '',
+        parentRelation: 'guardian',
+      });
       setShowForm(false);
       await fetchStudents();
     } catch (error: any) {
+      console.error('❌ Error:', error);
       Alert.alert('Error', error.message || 'Failed to create student');
     }
   };
@@ -323,14 +402,163 @@ export default function StudentsManagementScreen() {
 
             <View style={styles.inputGroup}>
               <ThemedText style={styles.inputLabel}>Class *</ThemedText>
-              <View style={[styles.inputWrapper, { backgroundColor: Colors[colorScheme ?? 'light'].inputBackground, borderColor: Colors[colorScheme ?? 'light'].border }]}>
+              <TouchableOpacity
+                style={[styles.inputWrapper, { backgroundColor: Colors[colorScheme ?? 'light'].inputBackground, borderColor: Colors[colorScheme ?? 'light'].border }]}
+                onPress={() => setShowClassPicker(true)}
+              >
                 <IconSymbol name="book.fill" size={18} color={Colors[colorScheme ?? 'light'].textSecondary} />
+                <ThemedText
+                  style={[
+                    styles.input,
+                    {
+                      color: formData.class ? Colors[colorScheme ?? 'light'].text : Colors[colorScheme ?? 'light'].textSecondary,
+                      flex: 1,
+                      paddingHorizontal: 8,
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {formData.class || 'Select a Class'}
+                </ThemedText>
+                <IconSymbol name="chevron.down" size={16} color={Colors[colorScheme ?? 'light'].textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Class Picker Modal */}
+            <Modal
+              visible={showClassPicker}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setShowClassPicker(false)}
+            >
+              <Pressable
+                style={[styles.modalOverlay, { backgroundColor: 'rgba(0, 0, 0, 0.5)' }]}
+                onPress={() => setShowClassPicker(false)}
+              >
+                <View style={[styles.classPickerModal, { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground }]}>
+                  <View style={styles.classPickerHeader}>
+                    <ThemedText type="defaultSemiBold" style={styles.classPickerTitle}>
+                      Select a Class
+                    </ThemedText>
+                    <TouchableOpacity
+                      onPress={() => setShowClassPicker(false)}
+                      style={styles.closeButton}
+                    >
+                      <IconSymbol name="xmark.circle.fill" size={24} color={Colors[colorScheme ?? 'light'].tint} />
+                    </TouchableOpacity>
+                  </View>
+
+                  {classesLoading ? (
+                    <ActivityIndicator size="large" color={Colors[colorScheme ?? 'light'].tint} style={{ marginVertical: 30 }} />
+                  ) : classes.length > 0 ? (
+                    <FlatList
+                      data={classes}
+                      keyExtractor={(item) => item._id}
+                      scrollEnabled
+                      style={styles.classList}
+                      renderItem={({ item }) => (
+                        <TouchableOpacity
+                          style={[
+                            styles.classOption,
+                            {
+                              backgroundColor:
+                                formData.class === item.name
+                                  ? Colors[colorScheme ?? 'light'].tint + '15'
+                                  : 'transparent',
+                              borderColor:
+                                formData.class === item.name
+                                  ? Colors[colorScheme ?? 'light'].tint
+                                  : Colors[colorScheme ?? 'light'].border,
+                            },
+                          ]}
+                          onPress={() => {
+                            setFormData({ ...formData, class: item.name });
+                            setShowClassPicker(false);
+                          }}
+                        >
+                          <View style={styles.classOptionContent}>
+                            <ThemedText
+                              type="defaultSemiBold"
+                              style={{
+                                color:
+                                  formData.class === item.name
+                                    ? Colors[colorScheme ?? 'light'].tint
+                                    : Colors[colorScheme ?? 'light'].text,
+                              }}
+                            >
+                              {item.name}
+                            </ThemedText>
+                            <ThemedText style={styles.classOptionDetail}>
+                              {item.code} • {item.department} • Sem {item.semester}
+                            </ThemedText>
+                          </View>
+                          {formData.class === item.name && (
+                            <IconSymbol name="checkmark.circle.fill" size={20} color={Colors[colorScheme ?? 'light'].tint} />
+                          )}
+                        </TouchableOpacity>
+                      )}
+                      ListEmptyComponent={
+                        <ThemedText style={styles.emptyListText}>No classes available</ThemedText>
+                      }
+                    />
+                  ) : (
+                    <ThemedText style={styles.emptyListText}>No classes found</ThemedText>
+                  )}
+                </View>
+              </Pressable>
+            </Modal>
+
+            <View style={[styles.divider, { backgroundColor: Colors[colorScheme ?? 'light'].border }]} />
+
+            <ThemedText style={[styles.inputLabel, { marginTop: 16, fontSize: 16, fontWeight: '600' }]}>
+              Parent/Guardian Details
+            </ThemedText>
+
+            <View style={styles.inputGroup}>
+              <ThemedText style={styles.inputLabel}>Parent Name *</ThemedText>
+              <View style={[styles.inputWrapper, { backgroundColor: Colors[colorScheme ?? 'light'].inputBackground, borderColor: Colors[colorScheme ?? 'light'].border }]}>
+                <IconSymbol name="person.fill" size={18} color={Colors[colorScheme ?? 'light'].textSecondary} />
                 <TextInput
                   style={[styles.input, { color: Colors[colorScheme ?? 'light'].text }]}
-                  placeholder="Class"
+                  placeholder="Parent Full Name"
                   placeholderTextColor={Colors[colorScheme ?? 'light'].textSecondary}
-                  value={formData.class}
-                  onChangeText={(text) => setFormData({ ...formData, class: text })}
+                  value={formData.parentName}
+                  onChangeText={(text) => setFormData({ ...formData, parentName: text })}
+                  autoComplete="off"
+                  textContentType="none"
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <ThemedText style={styles.inputLabel}>Parent Phone *</ThemedText>
+              <View style={[styles.inputWrapper, { backgroundColor: Colors[colorScheme ?? 'light'].inputBackground, borderColor: Colors[colorScheme ?? 'light'].border }]}>
+                <IconSymbol name="phone.fill" size={18} color={Colors[colorScheme ?? 'light'].textSecondary} />
+                <TextInput
+                  style={[styles.input, { color: Colors[colorScheme ?? 'light'].text }]}
+                  placeholder="Parent Phone Number"
+                  placeholderTextColor={Colors[colorScheme ?? 'light'].textSecondary}
+                  value={formData.parentPhone}
+                  onChangeText={(text) => setFormData({ ...formData, parentPhone: text })}
+                  keyboardType="phone-pad"
+                  autoComplete="off"
+                  textContentType="none"
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <ThemedText style={styles.inputLabel}>Parent Email (Optional)</ThemedText>
+              <View style={[styles.inputWrapper, { backgroundColor: Colors[colorScheme ?? 'light'].inputBackground, borderColor: Colors[colorScheme ?? 'light'].border }]}>
+                <IconSymbol name="envelope.fill" size={18} color={Colors[colorScheme ?? 'light'].textSecondary} />
+                <TextInput
+                  style={[styles.input, { color: Colors[colorScheme ?? 'light'].text }]}
+                  placeholder="Parent Email"
+                  placeholderTextColor={Colors[colorScheme ?? 'light'].textSecondary}
+                  value={formData.parentEmail}
+                  onChangeText={(text) => setFormData({ ...formData, parentEmail: text })}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
                   autoComplete="off"
                   textContentType="none"
                 />
@@ -342,7 +570,17 @@ export default function StudentsManagementScreen() {
                 style={[styles.button, styles.cancelButton, { backgroundColor: Colors[colorScheme ?? 'light'].border }]}
                 onPress={() => {
                   setShowForm(false);
-                  setFormData({ name: '', rollNumber: '', email: '', class: '' });
+                  setFormData({ 
+                    name: '', 
+                    rollNumber: '', 
+                    email: '', 
+                    class: '',
+                    phone: '',
+                    parentName: '',
+                    parentPhone: '',
+                    parentEmail: '',
+                    parentRelation: 'guardian',
+                  });
                 }}>
                 <ThemedText style={[styles.buttonText, { color: Colors[colorScheme ?? 'light'].text }]}>Cancel</ThemedText>
               </TouchableOpacity>
@@ -364,7 +602,17 @@ export default function StudentsManagementScreen() {
         {!showForm && (
           <>
             <TouchableOpacity style={styles.addButtonWrapper} onPress={() => {
-              setFormData({ name: '', rollNumber: '', email: '', class: '' });
+              setFormData({ 
+                name: '', 
+                rollNumber: '', 
+                email: '', 
+                class: '',
+                phone: '',
+                parentName: '',
+                parentPhone: '',
+                parentEmail: '',
+                parentRelation: 'guardian',
+              });
               setShowForm(true);
             }}>
               <LinearGradient
@@ -562,6 +810,11 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: '500',
+  },
+  divider: {
+    height: 1,
+    marginVertical: 16,
+    opacity: 0.3,
   },
   buttonRow: {
     flexDirection: 'row',
@@ -825,5 +1078,53 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 14,
     textAlign: 'center',
+  },
+  classPickerModal: {
+    borderRadius: 16,
+    maxHeight: '70%',
+    paddingVertical: 16,
+    borderWidth: 1,
+  },
+  classPickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+  },
+  classPickerTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  closeButton: {
+    padding: 8,
+  },
+  classList: {
+    maxHeight: 400,
+  },
+  classOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginHorizontal: 8,
+    marginVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1.5,
+  },
+  classOptionContent: {
+    flex: 1,
+  },
+  classOptionDetail: {
+    fontSize: 12,
+    opacity: 0.6,
+    marginTop: 2,
+  },
+  emptyListText: {
+    textAlign: 'center',
+    opacity: 0.6,
+    marginVertical: 30,
   },
 });
