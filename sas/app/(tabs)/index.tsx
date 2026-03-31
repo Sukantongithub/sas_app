@@ -53,14 +53,16 @@ export default function StudentsScreen() {
   const [approvalNotes, setApprovalNotes] = useState('');
 
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
-  const isTeacher = user?.role === 'teacher';
+  const isTeacher = user?.role === 'staff' || user?.role === 'hod';
   const isStudent = user?.role === 'student';
   const canManage = isAdmin || isTeacher;
 
+  // Load data whenever the active tab changes OR when auth resolves (canManage/token ready)
   useEffect(() => {
-    if (activeTab === 'students' && canManage) loadStudents();
-    else if (activeTab === 'requests' && canManage) loadRequests();
-  }, [activeTab]);
+    if (!canManage || !token) return;
+    if (activeTab === 'students') loadStudents();
+    else if (activeTab === 'requests') loadRequests();
+  }, [activeTab, canManage, token]);
 
   const loadStudents = async () => {
     if (!token || !canManage) return;
