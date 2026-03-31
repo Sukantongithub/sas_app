@@ -41,14 +41,13 @@ export default function ParentProfileScreen() {
     }
 
     try {
-      // Fetch all students to get parent's child (first match)
-      const response = await studentManagementAPI.listStudents(
-        { limit: 100 },
-        token
-      );
+      // Fetch parent's children only
+      const response = await studentManagementAPI.getMyChildren(token);
+      console.log('📥 My Children Response:', response);
 
-      if (response?.success && response.data?.students && response.data.students.length > 0) {
-        const student = response.data.students[0];
+      if (response?.success && response.data && response.data.length > 0) {
+        const student = response.data[0];
+        console.log('📥 First child:', student);
         
         // Fetch detailed student profile
         const detailedResponse = await studentManagementAPI.getStudentProfile(
@@ -56,12 +55,24 @@ export default function ParentProfileScreen() {
           token
         );
 
+        console.log('📥 Detailed Profile Response:', detailedResponse);
+
         if (detailedResponse?.success && detailedResponse.data) {
+          console.log('✅ Student Profile Set:', detailedResponse.data);
+          console.log('   Student Data:', {
+            name: detailedResponse.data.name,
+            rollNumber: detailedResponse.data.rollNumber,
+            class: detailedResponse.data.class
+          });
           setStudentProfile(detailedResponse.data);
+        } else {
+          console.warn('❌ No data in detailed response');
         }
+      } else {
+        console.warn('❌ No children found for parent');
       }
     } catch (error) {
-      console.error('Error fetching student profile:', error);
+      console.error('❌ Error fetching student profile:', error);
     } finally {
       setLoadingProfile(false);
     }

@@ -15,6 +15,7 @@ interface Child {
   rollNumber?: string;
   class?: string;
   section?: string;
+  userId?: string;  // Student's User account ID for fetching attendance
 }
 
 interface AttendanceStats {
@@ -47,29 +48,27 @@ export default function ParentAttendanceScreen() {
     if (!token) return;
     setLoading(true);
     try {
-      // Try to fetch all students and filter those linked to parent
-      const response = await studentManagementAPI.listStudents(
-        { limit: 100 },
-        token
-      );
+      // Fetch parent's children only
+      const response = await studentManagementAPI.getMyChildren(token);
 
-      if (response?.success && response.data?.students) {
-        // For now, assume the first student is the child
-        // This would need to be updated based on actual parent-child relationship
-        if (response.data.students.length > 0) {
-          const childData = response.data.students[0];
-          const child: Child = {
-            _id: childData._id,
-            name: childData.name,
-            rollNumber: childData.rollNumber,
-            class: childData.class,
-            section: childData.section
-          };
-          setChildren([child]);
-          setSelectedChild(child);
-          setView('details');
-          await fetchAttendanceForChild(child._id);
-        }
+      if (response?.success && response.data && response.data.length > 0) {
+        // Map all children with their User IDs
+        const childrenList = response.data.map((student: any) => ({
+          _id: student._id,
+          name: student.name,
+          rollNumber: student.rollNumber,
+          class: student.class,
+          section: student.section,
+          userId: student.userId  // Include the student's User account ID
+        }));
+        
+        setChildren(childrenList);
+        setSelectedChild(childrenList[0]);
+        setView('details');
+        await fetchAttendanceForChild(childrenList[0]);
+      } else {
+        Alert.alert('No Children', 'No children linked to your account');
+        setView('children');
       }
     } catch (error) {
       console.error('Error fetching children:', error);
@@ -79,16 +78,19 @@ export default function ParentAttendanceScreen() {
     }
   };
 
-  const fetchAttendanceForChild = async (childId: string) => {
-    if (!token) return;
+  const fetchAttendanceForChild = async (child: Child) => {
+    if (!token || !child.userId) {
+      console.warn('Cannot fetch attendance: missing token or userId');
+      return;
+    }
     try {
       let data;
       if (activeTab === 'day') {
-        data = await attendanceAPI.getStudentDaily(childId, undefined, token);
+        data = await attendanceAPI.getStudentDaily(child.userId, undefined, token);
       } else if (activeTab === 'subject') {
-        data = await attendanceAPI.getStudentSubjectWise(childId, undefined, token);
+        data = await attendanceAPI.getStudentSubjectWise(child.userId, undefined, token);
       } else {
-        data = await attendanceAPI.getStudentMonthly(childId, undefined, undefined, token);
+        data = await attendanceAPI.getStudentMonthly(child.userId, undefined, undefined, token);
       }
 
       if (data?.success) {
@@ -105,13 +107,13 @@ export default function ParentAttendanceScreen() {
   const handleSelectChild = (child: Child) => {
     setSelectedChild(child);
     setView('details');
-    fetchAttendanceForChild(child._id);
+    fetchAttendanceForChild(child);
   };
 
   const onRefresh = async () => {
     setRefreshing(true);
     if (selectedChild) {
-      await fetchAttendanceForChild(selectedChild._id);
+      await fetchAttendanceForChild(selectedChild);
     }
     setRefreshing(false);
   };
@@ -237,7 +239,7 @@ export default function ParentAttendanceScreen() {
                 onPress={() => {
                   setActiveTab(tab);
                   if (selectedChild) {
-                    fetchAttendanceForChild(selectedChild._id);
+                    fetchAttendanceForChild(selectedChild);
                   }
                 }}
                 style={[
