@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, View, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, TextInput, TouchableOpacity, Alert, ActivityIndicator, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -50,16 +50,18 @@ export default function LoginScreen() {
 
       <View style={styles.content}>
         <View style={styles.headerContainer}>
-          <View style={[styles.logoContainer, { 
-            backgroundColor: Colors[colorScheme ?? 'light'].tint + '20',
-          }]}>
-            <IconSymbol name="checkmark.shield.fill" size={48} color={Colors[colorScheme ?? 'light'].tint} />
+          <View style={styles.logoContainer}>
+            <Image 
+              source={require('@/assets/images/sas_logo.png')} 
+              style={styles.logo}
+              resizeMode="contain"
+            />
           </View>
           <ThemedText type="title" style={styles.title}>
-            Welcome Back
+            PresenX
           </ThemedText>
           <ThemedText style={[styles.subtitle, { color: Colors[colorScheme ?? 'light'].textSecondary }]}>
-            Sign in to your account
+            Secure login to your account
           </ThemedText>
         </View>
 
@@ -162,12 +164,18 @@ const styles = StyleSheet.create({
     marginBottom: 48,
   },
   logoContainer: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
+    overflow: 'hidden',
+  },
+  logo: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
   },
   title: {
     fontSize: 36,
