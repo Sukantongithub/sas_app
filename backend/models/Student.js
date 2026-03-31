@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const studentSchema = new mongoose.Schema({
+  // ── Basic Info ─────────────────────────────────────────────────
   name: {
     type: String,
     required: true,
@@ -10,20 +11,35 @@ const studentSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
-    trim: true
+    trim: true,
+    index: true
   },
   email: {
     type: String,
     trim: true,
     lowercase: true
   },
+
+  // ── Contact ────────────────────────────────────────────────────
+  mobileNumber: {
+    type: String,
+    trim: true
+  },
+  // Legacy alias kept for backwards compat
   phone: {
     type: String,
     trim: true
   },
-  class: {
+
+  // ── Academic ───────────────────────────────────────────────────
+  year: {
+    type: Number,
+    min: 1,
+    max: 5,
+    comment: '1 = First Year, 2 = Second Year, ...'
+  },
+  department: {
     type: String,
-    required: true,
     trim: true
   },
   section: {
@@ -31,18 +47,29 @@ const studentSchema = new mongoose.Schema({
     trim: true,
     default: 'A'
   },
-  department: {
-    type: String,
+  class: {
+    type: String,       // e.g. "CSE-B" or just the class label
+    required: true,
     trim: true
+  },
+  classId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Class',
+    index: true
+  },
+
+  // ── Family ─────────────────────────────────────────────────────
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',          // Student's User account (for login)
+    index: true
   },
   parentIds: [{
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
+    ref: 'User'          // Parent User accounts
   }],
-  classId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Class'
-  },
+
+  // ── Optional extras ────────────────────────────────────────────
   dateOfBirth: {
     type: Date
   },

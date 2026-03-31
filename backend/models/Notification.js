@@ -8,7 +8,24 @@ const notificationSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['attendance_marked', 'absent_alert', 'late_alert', 'leave_approved', 'leave_rejected', 'low_attendance', 'attendance_modification_request', 'sensitive_data_modification', 'general'],
+    enum: [
+      // Attendance
+      'attendance_marked', 'absent_alert', 'late_alert', 'low_attendance',
+      'attendance_modification_request', 'sensitive_data_modification',
+      'low_attendance_alert',
+      // Leave
+      'leave_approved', 'leave_rejected', 'leave_submitted',
+      'leave_approval_requested', 'leave_approved_parent', 'leave_rejected_parent',
+      // On-Duty
+      'on_duty_approval', 'on_duty_rejection',
+      // Absence Reason
+      'absence_reason_review', 'absence_reason_approved', 'absence_reason_rejected',
+      'absence_reason_approved_parent',
+      // Attendance edit/verify
+      'attendance_rejected', 'attendance_edited',
+      // General
+      'general'
+    ],
     required: true
   },
   title: {

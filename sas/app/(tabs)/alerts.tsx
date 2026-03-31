@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { StyleSheet, View, TouchableOpacity, ActivityIndicator, RefreshControl, FlatList, TextInput, ScrollView, Modal } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, ActivityIndicator, RefreshControl, FlatList, TextInput, ScrollView, Modal, Alert } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -55,21 +55,13 @@ export default function MessagesScreen() {
     if (!token) return;
     setLoadingStaff(true);
     try {
-      // Extract unique staff from conversations and try to build a list
-      const conversationStaff = conversations.map(conv => ({
-        _id: conv.participantId || conv.otherParticipantId,
-        name: conv.participantName,
-        role: conv.participantRole
-      })).filter(staff => staff._id && staff.name);
-
-      // Remove duplicates
-      const uniqueStaff = Array.from(
-        new Map(conversationStaff.map(staff => [staff._id, staff])).values()
-      );
-
-      setAvailableStaff(uniqueStaff);
+      // Call the real API to get all messageable users (not just from existing conversations)
+      const raw = await messagingAPI.getMessageableUsers(undefined, token);
+      const users: StaffMember[] = raw?.data ?? raw ?? [];
+      setAvailableStaff(Array.isArray(users) ? users : []);
     } catch (error) {
       console.error('Error fetching staff members:', error);
+      setAvailableStaff([]);
     } finally {
       setLoadingStaff(false);
     }
@@ -79,11 +71,11 @@ export default function MessagesScreen() {
     if (!userId || !token) return;
     setLoading(true);
     try {
-      const data = await messagingAPI.getConversations(userId, undefined, token);
-      const allConversations = data?.conversations || [];
-      const staffConversations = allConversations.filter((item: any) => isStaffRole(item?.participantRole));
-      setConversations(staffConversations);
-      const unread = staffConversations.reduce((sum: number, item: any) => sum + Number(item?.unreadCount || 0), 0);
+      const raw = await messagingAPI.getConversations(userId, undefined, token);
+      // sendSuccess wraps: { success, data: { conversations: [...] }, message }
+      const allConversations = raw?.data?.conversations ?? raw?.conversations ?? [];
+      setConversations(allConversations);
+      const unread = allConversations.reduce((sum: number, item: any) => sum + Number(item?.unreadCount || 0), 0);
       setUnreadCount(unread);
     } catch (error: any) {
       console.error('Error fetching conversations:', error);
@@ -95,8 +87,9 @@ export default function MessagesScreen() {
   const fetchMessages = async (conversationId: string) => {
     if (!token) return;
     try {
-      const data = await messagingAPI.getConversationMessages(conversationId, undefined, undefined, token);
-      setMessages(data.messages || []);
+      const raw = await messagingAPI.getConversationMessages(conversationId, undefined, undefined, token);
+      // sendSuccess wraps: { success, data: { messages: [...] }, message }
+      setMessages(raw?.data?.messages ?? raw?.messages ?? []);
     } catch (error: any) {
       console.error('Error fetching messages:', error);
     }
@@ -115,6 +108,7 @@ export default function MessagesScreen() {
     if (!messageText.trim() || !selectedConversation || !token) return;
 
     if (!isStaffRole(selectedConversation?.participantRole)) {
+      Alert.alert('Error', 'Cannot send messages to non-staff members');
       return;
     }
 
@@ -124,7 +118,7 @@ export default function MessagesScreen() {
       selectedConversation?.recipientId;
 
     if (!recipientId) {
-      console.error('No recipient found for selected conversation');
+      Alert.alert('Error', 'Unable to identify recipient. Please try again.');
       return;
     }
 
@@ -132,9 +126,24 @@ export default function MessagesScreen() {
     try {
       await messagingAPI.sendMessage(recipientId, messageText, undefined, token);
       setMessageText('');
-      await fetchMessages(selectedConversation._id);
+      // Refresh messages after short delay to ensure message is persisted
+      setTimeout(async () => {
+        try {
+          await fetchMessages(selectedConversation._id);
+        } catch (fetchError: any) {
+          console.warn('Could not refresh messages after send');
+        }
+      }, 300);
     } catch (error: any) {
-      console.error('Error sending message:', error);
+      console.error('Error sending message:', error?.message || error);
+      const errorMsg = error?.response?.data?.message || error?.message || 'Failed to send message. Please try again.';
+      Alert.alert('Send Error', errorMsg);
+      // Still try to refresh to show sent message even if notification fails
+      try {
+        await fetchMessages(selectedConversation._id);
+      } catch (e) {
+        console.warn('Could not refresh messages:', e);
+      }
     } finally {
       setSendingMessage(false);
     }
@@ -169,11 +178,16 @@ export default function MessagesScreen() {
       }
 
       // Show status message
-      if (failureCount > 0) {
-        console.warn(`Sent to ${successCount} staff, failed to send to ${failureCount}`);
+      if (successCount > 0 && failureCount === 0) {
+        Alert.alert('Success', `Message sent to ${successCount} staff member${successCount > 1 ? 's' : ''}`);
+      } else if (successCount > 0 && failureCount > 0) {
+        Alert.alert('Partial Success', `Sent to ${successCount} staff, failed for ${failureCount}. Please try again for failed recipients.`);
+      } else if (failureCount > 0) {
+        Alert.alert('Error', 'Failed to send message. Please try again.');
       }
     } catch (error) {
       console.error('Error in bulk message send:', error);
+      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
     } finally {
       setSendingBulk(false);
     }
@@ -288,7 +302,7 @@ export default function MessagesScreen() {
 
           {/* Messages List */}
           <FlatList
-            data={messages}
+            data={[...messages].reverse()}
             keyExtractor={(item) => item._id}
             renderItem={({ item }) => (
               <View style={[
@@ -303,7 +317,6 @@ export default function MessagesScreen() {
                 </ThemedText>
               </View>
             )}
-            inverted
             contentContainerStyle={styles.messagesList}
           />
 

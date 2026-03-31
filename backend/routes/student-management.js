@@ -6,10 +6,84 @@ const { requireAuth, requireRoles, requireSelfOrRoles } = require('../middleware
 // Models
 const Student = require('../models/Student');
 const User = require('../models/User');
+const Parent = require('../models/Parent');
 const Class = require('../models/Class');
 const Attendance = require('../models/Attendance');
 const Leave = require('../models/Leave');
 const Notification = require('../models/Notification');
+
+// ============================================================================
+// PARENT VIEW - GET THEIR CHILDREN
+// ============================================================================
+
+// @route   GET /api/student-management/my-children
+// @desc    Get all children linked to the logged-in parent
+// @access  Private (Parent)
+router.get('/my-children', requireAuth, asyncHandler(async (req, res) => {
+  if (req.user.role !== 'parent') {
+    return res.status(403).json({ success: false, message: 'Only parents can access this endpoint' });
+  }
+
+  try {
+    console.log('👨‍👩‍👧 Fetching children for parent User:', req.user._id);
+    
+    // Get parent document
+    const parent = await Parent.findOne({ userId: req.user._id })
+      .populate({
+        path: 'studentIds',
+        model: 'Student',
+        select: 'name rollNumber email class department section year parentIds'
+      });
+
+    console.log('📋 Parent Document:', parent);
+    console.log('📚 Parent studentIds:', parent?.studentIds?.length || 0);
+
+    if (!parent) {
+      console.log('⚠️  No parent document found');
+      return sendSuccess(res, [], 200, 'No children found');
+    }
+
+    // Verify all students have this parent linked and get their User accounts
+    const childrenWithUserAccounts = await Promise.all(
+      parent.studentIds.map(async (student) => {
+        console.log('\n  🔍 Checking student:', student._id, student.name);
+        console.log('    Student parentIds:', student.parentIds);
+        console.log('    Has this parent?', student.parentIds?.some(pId => pId.toString() === req.user._id.toString()));
+        
+        // Verify this student has this parent linked
+        if (!(student.parentIds && student.parentIds.some(pId => pId.toString() === req.user._id.toString()))) {
+          console.log('    ❌ Student does NOT have this parent in parentIds');
+          return null;
+        }
+
+        // Find the User account for this student (if it exists)
+        const studentUser = await User.findOne({ studentId: student._id }).select('_id');
+        console.log('    ✅ Student has parent. User account:', studentUser?._id);
+        
+        return {
+          _id: student._id,
+          name: student.name,
+          rollNumber: student.rollNumber,
+          email: student.email,
+          class: student.class,
+          department: student.department,
+          section: student.section,
+          year: student.year,
+          userId: studentUser?._id  // Include student's user _id for attendance queries
+        };
+      })
+    );
+
+    // Filter out null entries
+    const children = childrenWithUserAccounts.filter(child => child !== null);
+
+    console.log('✅ Final children count:', children.length);
+    sendSuccess(res, children, 200, 'Children retrieved successfully');
+  } catch (error) {
+    console.error('❌ Error in my-children:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+}));
 
 // ============================================================================
 // MANAGE STUDENTS - ADMIN/TEACHER VIEW
@@ -18,7 +92,7 @@ const Notification = require('../models/Notification');
 // @route   GET /api/student-management/list
 // @desc    Get all students with filters
 // @access  Private (Admin, Teacher)
-router.get('/list', requireAuth, requireRoles('super_admin', 'admin', 'teacher'), asyncHandler(async (req, res) => {
+router.get('/list', requireAuth, requireRoles('super_admin', 'admin', 'staff', 'hod'), asyncHandler(async (req, res) => {
   const { class: classId, department, search, page = 1, limit = 20, status = 'active' } = req.query;
 
   let query = { role: 'student' };
@@ -35,10 +109,10 @@ router.get('/list', requireAuth, requireRoles('super_admin', 'admin', 'teacher')
   if (department) query.department = department;
   if (status) query.isActive = status === 'active';
 
-  // For teachers, only show their class students
-  if (req.user.role === 'teacher') {
-    const teacherClasses = await Class.find({ faculty: req.user._id }).select('students');
-    const studentIds = teacherClasses.flatMap(c => c.students);
+  // For staff/hod, only show students in their assigned classes
+  if (req.user.role === 'staff' || req.user.role === 'hod') {
+    const staffClasses = await Class.find({ faculty: req.user._id }).select('students');
+    const studentIds = staffClasses.flatMap(c => c.students);
     query._id = { $in: studentIds };
   }
 
@@ -59,32 +133,71 @@ router.get('/list', requireAuth, requireRoles('super_admin', 'admin', 'teacher')
 }));
 
 // @route   GET /api/student-management/:studentId/profile
-// @desc    Get complete student profile with stats
-// @access  Private (Self, Teacher, Admin)
+// @desc    Get complete student profile with stats and parent info
+// @access  Private (Self, Parent, Teacher, Admin)
 router.get('/:studentId/profile', requireAuth, asyncHandler(async (req, res) => {
-  const student = await User.findById(req.params.studentId)
-    .select('-password');
+  // Try to find by Student._id first (from parent's perspective)
+  let student = await Student.findById(req.params.studentId)
+    .populate('userId', 'email isActive')
+    .lean();
 
-  if (!student || student.role !== 'student') {
+  if (!student) {
+    // Try to find by User._id (from student's perspective)
+    const userStudent = await User.findById(req.params.studentId)
+      .select('-password')
+      .lean();
+
+    if (!userStudent || userStudent.role !== 'student') {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    // Find the Student document linked to this User
+    student = await Student.findById(userStudent.studentId)
+      .populate('userId', 'email isActive')
+      .lean();
+  }
+
+  if (!student) {
     return res.status(404).json({ message: 'Student not found' });
   }
 
   // Authorization check
-  if (req.user.role === 'student' && !req.user._id.equals(req.params.studentId)) {
+  if (req.user.role === 'student' && !req.user._id.equals(student.userId?._id)) {
     return res.status(403).json({ message: 'Not authorized' });
   }
 
-  // Get attendance stats
-  const totalAttendance = await Attendance.countDocuments({ studentId: req.params.studentId });
-  const presentCount = await Attendance.countDocuments({ studentId: req.params.studentId, status: 'present' });
+  if (req.user.role === 'parent') {
+    // Check if parent has access to this student
+    if (!student.parentIds?.some(p => p.toString() === req.user._id.toString())) {
+      return res.status(403).json({ message: 'Not authorized' });
+    }
+  }
+
+  // Fetch parent documents for all parent User IDs
+  let parentDetails = [];
+  if (student.parentIds && student.parentIds.length > 0) {
+    console.log('🔍 Fetching parent details for parentIds:', student.parentIds);
+    
+    const parentDocs = await Parent.find({ userId: { $in: student.parentIds } })
+      .select('userId name mobileNumber email relation')
+      .lean();
+    
+    console.log('📋 Found parent documents:', parentDocs.length);
+    parentDetails = parentDocs;
+  }
+
+  // Get attendance stats using userId
+  const totalAttendance = await Attendance.countDocuments({ studentId: student.userId });
+  const presentCount = await Attendance.countDocuments({ studentId: student.userId, status: 'present' });
   const attendancePercentage = totalAttendance > 0 ? ((presentCount / totalAttendance) * 100).toFixed(2) : 0;
 
-  // Get leave stats
-  const totalLeaves = await Leave.countDocuments({ studentId: req.params.studentId });
-  const approvedLeaves = await Leave.countDocuments({ studentId: req.params.studentId, status: 'approved' });
+  // Get leave stats using userId
+  const totalLeaves = await Leave.countDocuments({ studentId: student._id });
+  const approvedLeaves = await Leave.countDocuments({ studentId: student._id, status: 'approved' });
 
   sendSuccess(res, {
-    ...student.toObject(),
+    ...student,
+    parentDetails,  // Include full parent information
     statistics: {
       totalAttendance,
       presentCount,
@@ -148,10 +261,10 @@ router.put('/:studentId/status', requireAuth, requireRoles('super_admin', 'admin
 router.get('/:studentId/pending-requests', requireAuth, asyncHandler(async (req, res) => {
   // Authorization check
   const isStudent = req.user.role === 'student' && req.user._id.equals(req.params.studentId);
-  const isTeacher = req.user.role === 'teacher';
+  const isStaff = req.user.role === 'staff' || req.user.role === 'hod';
   const isAdmin = req.user.role === 'super_admin' || req.user.role === 'admin';
 
-  if (!isStudent && !isTeacher && !isAdmin) {
+  if (!isStudent && !isStaff && !isAdmin) {
     return res.status(403).json({ message: 'Not authorized' });
   }
 
@@ -173,7 +286,7 @@ router.get('/:studentId/pending-requests', requireAuth, asyncHandler(async (req,
 // @route   GET /api/student-management/requests/approval-queue
 // @desc    Get all requests awaiting approval (for admin/teacher)
 // @access  Private (Admin, Teacher)
-router.get('/requests/approval-queue', requireAuth, requireRoles('super_admin', 'admin', 'teacher'), asyncHandler(async (req, res) => {
+router.get('/requests/approval-queue', requireAuth, requireRoles('super_admin', 'admin', 'staff', 'hod'), asyncHandler(async (req, res) => {
   const { type = 'all', priority = 'all' } = req.query;
 
   let query = { status: 'pending' };
@@ -198,7 +311,7 @@ router.get('/requests/approval-queue', requireAuth, requireRoles('super_admin', 
 // @route   POST /api/student-management/requests/:requestId/approve
 // @desc    Approve a student request
 // @access  Private (Admin, Teacher)
-router.post('/requests/:requestId/approve', requireAuth, requireRoles('super_admin', 'admin', 'teacher'), asyncHandler(async (req, res) => {
+router.post('/requests/:requestId/approve', requireAuth, requireRoles('super_admin', 'admin', 'staff', 'hod'), asyncHandler(async (req, res) => {
   const { comments, priority } = req.body;
 
   const request = await findOrFail(Leave, req.params.requestId);
@@ -213,10 +326,10 @@ router.post('/requests/:requestId/approve', requireAuth, requireRoles('super_adm
 
   // Notify student
   await Notification.create({
-    userId: request.studentId,
-    type: 'request_approved',
-    message: `Your ${request.leaveType} request has been approved`,
-    relatedId: req.params.requestId
+    userId: request.requestedBy,
+    type: 'leave_approved',
+    title: 'Request Approved',
+    message: `Your ${request.leaveType || 'leave'} request has been approved`,
   });
 
   sendSuccess(res, request, 200, 'Request approved');
@@ -225,7 +338,7 @@ router.post('/requests/:requestId/approve', requireAuth, requireRoles('super_adm
 // @route   POST /api/student-management/requests/:requestId/reject
 // @desc    Reject a student request
 // @access  Private (Admin, Teacher)
-router.post('/requests/:requestId/reject', requireAuth, requireRoles('super_admin', 'admin', 'teacher'), asyncHandler(async (req, res) => {
+router.post('/requests/:requestId/reject', requireAuth, requireRoles('super_admin', 'admin', 'staff', 'hod'), asyncHandler(async (req, res) => {
   const { reason } = req.body;
 
   if (!reason) {
@@ -243,10 +356,10 @@ router.post('/requests/:requestId/reject', requireAuth, requireRoles('super_admi
 
   // Notify student
   await Notification.create({
-    userId: request.studentId,
-    type: 'request_rejected',
-    message: `Your ${request.leaveType} request has been rejected. Reason: ${reason}`,
-    relatedId: req.params.requestId
+    userId: request.requestedBy,
+    type: 'leave_rejected',
+    title: 'Request Rejected',
+    message: `Your ${request.leaveType || 'leave'} request has been rejected. Reason: ${reason}`,
   });
 
   sendSuccess(res, request, 200, 'Request rejected');
@@ -374,15 +487,58 @@ router.get('/:studentId/notifications', requireAuth, asyncHandler(async (req, re
 // @desc    Get student timetable/schedule
 // @access  Private (Self, Teacher, Admin)
 router.get('/:studentId/schedule', requireAuth, asyncHandler(async (req, res) => {
-  const student = await User.findById(req.params.studentId);
-  if (!student || student.role !== 'student') {
+  console.log('📋 Fetching schedule for ID:', req.params.studentId);
+  
+  const Student = require('../models/Student');
+  
+  // Try to find Student document directly
+  let StudentDoc = await Student.findById(req.params.studentId);
+  
+  // If not found, it might be a User ID - check if this User has a studentId reference
+  if (!StudentDoc) {
+    console.log('📋 Not a Student ID, checking if it\'s a User ID with studentId reference');
+    const userRef = await User.findById(req.params.studentId);
+    
+    if (userRef?.studentId) {
+      console.log('📋 Found User with studentId reference:', userRef.studentId);
+      StudentDoc = await Student.findById(userRef.studentId);
+    }
+  }
+  
+  if (!StudentDoc) {
+    console.log('❌ Student document not found for ID:', req.params.studentId);
     return res.status(404).json({ message: 'Student not found' });
   }
+  
+  console.log('📋 Student found:', { studentId: StudentDoc._id, class: StudentDoc.class, classId: StudentDoc.classId });
 
   const Class = require('../models/Class');
-  const classData = await Class.findOne({ students: req.params.studentId })
-    .select('schedule');
+  let classData = null;
 
+  // Try classId first (preferred)
+  if (StudentDoc.classId) {
+    classData = await Class.findById(StudentDoc.classId).select('schedule name');
+    console.log('📋 Found class by classId:', { className: classData?.name });
+  }
+
+  // If no classId or classId lookup failed, try by name
+  if (!classData && StudentDoc.class) {
+    classData = await Class.findOne({ name: StudentDoc.class }).select('schedule name');
+    console.log('📋 Found class by name:', { className: classData?.name });
+  }
+
+  // Fallback: find by student in students array (legacy support)
+  if (!classData) {
+    classData = await Class.findOne({ students: StudentDoc.userId }).select('schedule name');
+    console.log('📋 Found class by students array:', { className: classData?.name });
+  }
+
+  if (!classData) {
+    console.log('❌ Class not found for student:', { class: StudentDoc.class, classId: StudentDoc.classId });
+    return sendSuccess(res, [], 200, 'No schedule found for this student');
+  }
+
+  console.log('✅ Schedule found for class:', classData.name);
   sendSuccess(res, classData?.schedule || [], 200, 'Student schedule retrieved');
 }));
 

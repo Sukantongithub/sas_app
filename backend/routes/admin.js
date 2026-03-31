@@ -6,6 +6,7 @@ const XLSX = require('xlsx');
 const User = require('../models/User');
 const Student = require('../models/Student');
 const Staff = require('../models/Staff');
+const Parent = require('../models/Parent');
 const Attendance = require('../models/Attendance');
 const Leave = require('../models/Leave');
 const Timetable = require('../models/Timetable');
@@ -113,7 +114,7 @@ router.post('/staff',
     body('email').isEmail().withMessage('Valid email is required'),
     body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
     body('employeeId').notEmpty().withMessage('Employee ID is required'),
-    body('designation').isIn(['admin', 'staff', 'security', 'maintenance', 'office_manager']).withMessage('Invalid designation'),
+    body('designation').isIn(['admin', 'hod', 'staff', 'security', 'maintenance', 'office_manager']).withMessage('Invalid designation'),
     body('department').notEmpty().withMessage('Department is required'),
     body('dateOfJoining').isISO8601().withMessage('Valid date is required')
   ],
@@ -213,27 +214,17 @@ router.post('/staff/import',
       }
 
       const sheet = workbook.Sheets[firstSheetName];
-      const headerRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-      if (!headerRows.length) {
-        return res.status(400).json({ success: false, message: 'The uploaded file is empty' });
-      }
 
-      const normalizeHeader = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-      const actualHeaders = (headerRows[0] || []).map(normalizeHeader).filter(Boolean);
-      const expectedHeaders = ['name', 'email', 'employeeid', 'designation', 'department'];
-      const missingHeaders = expectedHeaders.filter(h => !actualHeaders.includes(h));
-      if (missingHeaders.length > 0) {
-        return res.status(400).json({
-          success: false,
-          message: `Invalid file format. Missing columns: ${missingHeaders.join(', ')}. Required: Name, Email, Employee ID, Designation, Department`
-        });
-      }
-
-      const validDesignations = ['admin', 'staff', 'security', 'maintenance', 'office_manager'];
+      // Parse all rows — keys are the first row (headers) automatically
       const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
       if (!rows.length) {
-        return res.status(400).json({ success: false, message: 'No staff rows found in the file' });
+        return res.status(400).json({ success: false, message: 'No data rows found in the file. Make sure the first row is the header.' });
       }
+
+      // Normalise helper: strips spaces/case so "Employee ID" → "employeeid"
+      const normalizeHeader = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+      const validDesignations = ['admin', 'hod', 'staff', 'security', 'maintenance', 'office_manager'];
 
       const getVal = (normalizedRow, key) => String(normalizedRow[key] || '').trim();
 
@@ -513,38 +504,192 @@ router.get('/students/:id', requireAuth, requireRoles('super_admin', 'admin'), a
 });
 
 /**
+ * Helper function to generate unique parent ID
+ * Format: PAR-YYYY-XXXX
+ */
+const generateParentId = async () => {
+  const year = new Date().getFullYear();
+  const count = await Parent.countDocuments();
+  return `PAR-${year}-${String(count + 1).padStart(4, '0')}`;
+};
+
+/**
  * @route   POST /api/admin/students
- * @desc    Create new student
+ * @desc    Create new student with parent account
  * @access  Admin only
  */
 router.post('/students',
   requireAuth,
   requireRoles('super_admin', 'admin'),
   [
-    body('name').notEmpty().withMessage('Name is required'),
+    body('name').notEmpty().withMessage('Student name is required'),
     body('rollNumber').notEmpty().withMessage('Roll number is required'),
     body('email').isEmail().withMessage('Valid email is required'),
-    body('class').notEmpty().withMessage('Class is required')
+    body('class').notEmpty().withMessage('Class is required'),
+    body('parentName').notEmpty().withMessage('Parent name is required'),
+    body('parentPhone').notEmpty().withMessage('Parent phone is required'),
+    body('parentEmail').optional().isEmail().withMessage('Valid parent email is required')
   ],
   validateRequest,
   async (req, res) => {
     try {
-      const { name, rollNumber, email, phone, class: studentClass } = req.body;
+      const { name, rollNumber, email, phone, class: studentClass, parentName, parentPhone, parentEmail, parentRelation } = req.body;
 
+      // ============ Create Student ============
       const student = new Student({
         name,
         rollNumber,
         email,
         phone,
-        class: studentClass
+        class: studentClass,
+        parentIds: [] // Will be populated after parent is created
       });
 
       const newStudent = await student.save();
-      res.status(201).json({
-        success: true,
-        message: 'Student created successfully',
-        data: newStudent
-      });
+
+      // ============ Create Student User Account ============
+      let studentUser = null;
+      try {
+        const studentUserEmail = email || `${rollNumber}@school.local`;
+        const studentDefaultPassword = rollNumber; // Default password = roll number
+
+        studentUser = new User({
+          name,
+          email: studentUserEmail,
+          password: studentDefaultPassword, // Will be hashed by pre-save hook
+          role: 'student',
+          studentId: newStudent._id, // Link to Student document
+          isActive: true
+        });
+
+        studentUser = await studentUser.save();
+
+        // Update Student with User linkage
+        newStudent.userId = studentUser._id;
+        await newStudent.save();
+
+        // ============ Link Student to Class ============
+        try {
+          // Find the class by NAME matching the student's class field
+          const classDoc = await Class.findOne({ name: studentClass });
+          
+          if (classDoc) {
+            console.log('🏫 Found class:', { classId: classDoc._id, className: classDoc.name });
+            
+            // Set classId on the student
+            newStudent.classId = classDoc._id;
+            await newStudent.save();
+            
+            // Add the student User to the Class.students array
+            if (!classDoc.students.includes(studentUser._id)) {
+              classDoc.students.push(studentUser._id);
+              await classDoc.save();
+              console.log('✅ Added student to class:', { studentUserId: studentUser._id, classId: classDoc._id });
+            } else {
+              console.log('⚠️ Student already in class students array');
+            }
+          } else {
+            console.log('⚠️ Class not found for:', studentClass);
+          }
+        } catch (classLinkError) {
+          console.error('⚠️ Error linking student to class:', classLinkError.message);
+          // Continue anyway - student is created even if class linking fails
+        }
+      } catch (studentUserError) {
+        console.error('Error creating student user account:', studentUserError.message);
+        // Continue anyway - student document is created even if user creation fails
+      }
+
+      // ============ Create Parent Account ============
+      try {
+        // Generate default password for parent (parentPhone + studentRollNumber)
+        const defaultPassword = `${parentPhone}${rollNumber}`;
+
+        // Create User account for parent
+        const parentUser = new User({
+          name: parentName,
+          email: parentEmail || `parent_${rollNumber}@school.local`,
+          password: defaultPassword, // Will be hashed by pre-save hook
+          role: 'parent',
+          isActive: true
+        });
+
+        const savedParentUser = await parentUser.save();
+
+        // Generate unique parent ID
+        const parentId = await generateParentId();
+
+        // Create Parent document
+        const parentDoc = new Parent({
+          userId: savedParentUser._id,
+          name: parentName,
+          parentId: parentId,
+          mobileNumber: parentPhone,
+          email: parentEmail || `parent_${rollNumber}@school.local`,
+          studentIds: [newStudent._id],
+          relation: parentRelation || 'guardian',
+          isActive: true
+        });
+
+        const savedParent = await parentDoc.save();
+
+        // ============ Link Parent to Student ============
+        console.log('🔗 Linking parent to student');
+        console.log('  Student ID:', newStudent._id);
+        console.log('  Parent User ID:', savedParentUser._id);
+        console.log('  Parent Doc ID:', savedParent._id);
+        
+        // Ensure the Student document is fresh from DB before updating
+        let updatedStudent = await Student.findById(newStudent._id);
+        if (!updatedStudent.parentIds) {
+          updatedStudent.parentIds = [];
+        }
+        updatedStudent.parentIds.push(savedParentUser._id);
+        await updatedStudent.save();
+        
+        console.log('✅ Student parentIds after update:', updatedStudent.parentIds);
+        console.log('✅ Parent studentIds after create:', savedParent.studentIds);
+
+        // Update User with parentId reference
+        savedParentUser.parentId = savedParent._id;
+        await savedParentUser.save();
+
+        res.status(201).json({
+          success: true,
+          message: 'Student and parent account created successfully',
+          data: {
+            student: {
+              id: newStudent._id,
+              name: newStudent.name,
+              rollNumber: newStudent.rollNumber,
+              email: newStudent.email,
+              class: newStudent.class,
+              accountCreated: studentUser ? true : false,
+              loginCredentials: studentUser ? {
+                email: studentUser.email,
+                defaultPassword: rollNumber,
+                note: 'Default password is the roll number. Please ask student to change it on first login.'
+              } : null
+            },
+            parent: {
+              id: savedParent._id,
+              name: parentName,
+              phone: parentPhone,
+              email: parentEmail || `parent_${rollNumber}@school.local`,
+              accountCreated: true,
+              defaultPassword: defaultPassword,
+              note: 'Please share this default password with parent and ask them to change it on first login'
+            }
+          }
+        });
+      } catch (parentError) {
+        // If parent creation fails, delete the student
+        await Student.findByIdAndDelete(newStudent._id);
+        return res.status(400).json({ 
+          success: false, 
+          message: `Failed to create parent account: ${parentError.message}` 
+        });
+      }
     } catch (error) {
       if (error.code === 11000) {
         res.status(400).json({ success: false, message: 'Roll number or email already exists' });

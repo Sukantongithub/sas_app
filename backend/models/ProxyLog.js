@@ -8,7 +8,7 @@ const proxyLogSchema = new mongoose.Schema({
     required: true,
     index: true
   },
-  
+
   // Session during which proxy was detected
   sessionId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -16,14 +16,14 @@ const proxyLogSchema = new mongoose.Schema({
     required: true,
     index: true
   },
-  
+
   // Class information
   classId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Class',
     index: true
   },
-  
+
   // Type of proxy detection
   detectionType: {
     type: String,
@@ -41,7 +41,7 @@ const proxyLogSchema = new mongoose.Schema({
     ],
     index: true
   },
-  
+
   // Severity level
   severity: {
     type: String,
@@ -50,7 +50,7 @@ const proxyLogSchema = new mongoose.Schema({
     default: 'medium',
     index: true
   },
-  
+
   // Detection evidence data
   evidenceData: {
     // BLE RSSI data
@@ -59,11 +59,11 @@ const proxyLogSchema = new mongoose.Schema({
       min: -100,
       max: 0
     },
-    
+
     calculatedDistance: {
       type: Number // in meters
     },
-    
+
     // Device information
     deviceId: String,
     expectedDeviceId: String,
@@ -73,7 +73,7 @@ const proxyLogSchema = new mongoose.Schema({
       rssi: Number,
       timestamp: Date
     }],
-    
+
     // Motion sensor data
     motionConfidence: Number, // 0.0 to 1.0
     accelerometerData: {
@@ -87,7 +87,7 @@ const proxyLogSchema = new mongoose.Schema({
       y: Number,
       z: Number
     },
-    
+
     // Location data
     beaconId: String,
     expectedBeaconId: String,
@@ -96,13 +96,13 @@ const proxyLogSchema = new mongoose.Schema({
       longitude: Number,
       accuracy: Number
     },
-    
+
     // Timing data
     attemptTime: Date,
     sessionStartTime: Date,
     sessionEndTime: Date,
     timeDifference: Number, // minutes outside session window
-    
+
     // Previous attendance data (for pattern analysis)
     recentAttendancePattern: [{
       date: Date,
@@ -110,13 +110,13 @@ const proxyLogSchema = new mongoose.Schema({
       location: String,
       timeDifference: Number // minutes between consecutive attendance
     }],
-    
+
     // Additional metadata
     phoneModel: String,
     appVersion: String,
     batteryLevel: Number
   },
-  
+
   // Auto-calculated risk score (0-100)
   riskScore: {
     type: Number,
@@ -124,7 +124,7 @@ const proxyLogSchema = new mongoose.Schema({
     max: 100,
     default: 50
   },
-  
+
   // Action taken by system
   actionTaken: {
     type: String,
@@ -139,7 +139,7 @@ const proxyLogSchema = new mongoose.Schema({
     ],
     default: 'manual_review_required'
   },
-  
+
   // Review status
   status: {
     type: String,
@@ -147,43 +147,43 @@ const proxyLogSchema = new mongoose.Schema({
     default: 'pending',
     index: true
   },
-  
+
   // Admin review
   reviewedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
-  
+
   reviewedAt: {
     type: Date
   },
-  
+
   reviewNotes: {
     type: String
   },
-  
+
   // Attendance record that was flagged (if exists)
   attendanceRecordId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Attendance'
   },
-  
+
   // Student notification sent
   studentNotified: {
     type: Boolean,
     default: false
   },
-  
+
   notificationSentAt: {
     type: Date
   },
-  
+
   // Repeat offender tracking
   isRepeatOffender: {
     type: Boolean,
     default: false
   },
-  
+
   previousOffenseCount: {
     type: Number,
     default: 0
@@ -199,9 +199,9 @@ proxyLogSchema.index({ detectionType: 1, status: 1 });
 proxyLogSchema.index({ riskScore: -1, status: 1 });
 
 // Calculate risk score based on detection type and evidence
-proxyLogSchema.methods.calculateRiskScore = function() {
+proxyLogSchema.methods.calculateRiskScore = function () {
   let score = 0;
-  
+
   // Base score by detection type
   const typeScores = {
     'multiple_devices': 90,
@@ -214,17 +214,17 @@ proxyLogSchema.methods.calculateRiskScore = function() {
     'time_mismatch': 40,
     'pattern_anomaly': 65
   };
-  
+
   score = typeScores[this.detectionType] || 50;
-  
+
   // Adjust based on evidence
   const evidence = this.evidenceData;
-  
+
   // RSSI adjustment
   if (evidence.rssi && evidence.rssi < -80) {
     score += 10; // Very weak signal = likely proxy
   }
-  
+
   // Motion confidence adjustment
   if (evidence.motionConfidence !== undefined) {
     if (evidence.motionConfidence < 0.3) {
@@ -235,25 +235,25 @@ proxyLogSchema.methods.calculateRiskScore = function() {
       score -= 10; // Good motion reduces suspicion
     }
   }
-  
+
   // Multiple devices adjustment
   if (evidence.deviceCount > 1) {
     score += (evidence.deviceCount - 1) * 20;
   }
-  
+
   // Time mismatch adjustment
   if (evidence.timeDifference && Math.abs(evidence.timeDifference) > 30) {
     score += 15; // More than 30 min outside session
   }
-  
+
   // Repeat offender
   if (this.previousOffenseCount > 0) {
     score += this.previousOffenseCount * 5;
   }
-  
+
   // Cap at 100
   this.riskScore = Math.min(score, 100);
-  
+
   // Set severity based on score
   if (this.riskScore >= 80) {
     this.severity = 'critical';
@@ -264,12 +264,12 @@ proxyLogSchema.methods.calculateRiskScore = function() {
   } else {
     this.severity = 'low';
   }
-  
+
   return this.riskScore;
 };
 
 // Static method to get proxy statistics for a student
-proxyLogSchema.statics.getStudentProxyStats = async function(studentId) {
+proxyLogSchema.statics.getStudentProxyStats = async function (studentId) {
   const stats = await this.aggregate([
     { $match: { studentId: mongoose.Types.ObjectId(studentId) } },
     {
@@ -279,7 +279,7 @@ proxyLogSchema.statics.getStudentProxyStats = async function(studentId) {
       }
     }
   ]);
-  
+
   const typeBreakdown = await this.aggregate([
     { $match: { studentId: mongoose.Types.ObjectId(studentId) } },
     {
@@ -291,7 +291,7 @@ proxyLogSchema.statics.getStudentProxyStats = async function(studentId) {
     },
     { $sort: { count: -1 } }
   ]);
-  
+
   return {
     statusBreakdown: stats,
     typeBreakdown: typeBreakdown,
@@ -300,21 +300,21 @@ proxyLogSchema.statics.getStudentProxyStats = async function(studentId) {
 };
 
 // Static method to get high-risk pending logs
-proxyLogSchema.statics.getHighRiskPending = function(limit = 50) {
+proxyLogSchema.statics.getHighRiskPending = function (limit = 50) {
   return this.find({
     status: { $in: ['pending', 'under_review'] },
     riskScore: { $gte: 60 }
   })
-  .populate('studentId', 'name email rollNumber')
-  .populate('sessionId', 'subject date')
-  .sort({ riskScore: -1, createdAt: -1 })
-  .limit(limit);
+    .populate('studentId', 'name email rollNumber')
+    .populate('sessionId', 'subject date')
+    .sort({ riskScore: -1, createdAt: -1 })
+    .limit(limit);
 };
 
 // Static method to get repeat offenders
-proxyLogSchema.statics.getRepeatOffenders = async function(minOffenses = 3, days = 30) {
+proxyLogSchema.statics.getRepeatOffenders = async function (minOffenses = 3, days = 30) {
   const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-  
+
   return this.aggregate([
     {
       $match: {
@@ -342,7 +342,7 @@ proxyLogSchema.statics.getRepeatOffenders = async function(minOffenses = 3, days
 };
 
 // Pre-save hook to check for repeat offenders
-proxyLogSchema.pre('save', async function(next) {
+proxyLogSchema.pre('save', async function (next) {
   if (this.isNew) {
     // Count previous offenses for this student
     const previousOffenses = await this.constructor.countDocuments({
@@ -350,10 +350,10 @@ proxyLogSchema.pre('save', async function(next) {
       status: { $in: ['confirmed_proxy', 'under_review'] },
       _id: { $ne: this._id }
     });
-    
+
     this.previousOffenseCount = previousOffenses;
     this.isRepeatOffender = previousOffenses >= 2;
-    
+
     // Calculate risk score
     this.calculateRiskScore();
   }

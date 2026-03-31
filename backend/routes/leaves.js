@@ -100,7 +100,7 @@ router.get('/', requireAuth, async (req, res) => {
 // @route   GET /api/leaves/pending
 // @desc    Get pending leave requests (for teachers/admins)
 // @access  Private (Teacher/Admin)
-router.get('/pending', requireAuth, requireRoles('super_admin', 'admin', 'faculty', 'teacher'), async (req, res) => {
+router.get('/pending', requireAuth, requireRoles('super_admin', 'admin', 'staff', 'hod'), async (req, res) => {
   try {
     const leaves = await Leave.getPendingLeaves();
     res.json(leaves);
@@ -127,7 +127,7 @@ router.get('/:id', requireAuth, async (req, res) => {
     // Check access
     const isParent = req.user.role === 'parent' && leave.requestedBy._id.equals(req.user._id);
     const isStudent = req.user.role === 'student' && leave.requestedBy._id.equals(req.user._id);
-    const isStaff = ['super_admin', 'admin', 'faculty', 'teacher'].includes(req.user.role);
+    const isStaff = ['super_admin', 'admin', 'staff', 'hod'].includes(req.user.role);
     
     if (!isParent && !isStudent && !isStaff) {
       return res.status(403).json({ message: 'Access denied' });
@@ -143,7 +143,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 // @route   PUT /api/leaves/:id/approve
 // @desc    Approve leave request
 // @access  Private (Teacher/Admin)
-router.put('/:id/approve', requireAuth, requireRoles('super_admin', 'admin', 'faculty', 'teacher'), async (req, res) => {
+router.put('/:id/approve', requireAuth, requireRoles('super_admin', 'admin', 'staff', 'hod'), async (req, res) => {
   try {
     const { remarks } = req.body;
     const leave = await Leave.findById(req.params.id)
@@ -183,7 +183,7 @@ router.put('/:id/approve', requireAuth, requireRoles('super_admin', 'admin', 'fa
 // @route   PUT /api/leaves/:id/reject
 // @desc    Reject leave request
 // @access  Private (Teacher/Admin)
-router.put('/:id/reject', requireAuth, requireRoles('super_admin', 'admin', 'faculty', 'teacher'), async (req, res) => {
+router.put('/:id/reject', requireAuth, requireRoles('super_admin', 'admin', 'staff', 'hod'), async (req, res) => {
   try {
     const { remarks } = req.body;
     const leave = await Leave.findById(req.params.id)

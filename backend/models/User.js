@@ -45,8 +45,19 @@ const userSchema = new mongoose.Schema({
   },
   studentId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Student',
-    // Only required if role is 'student'
+    ref: 'Student',   // populated when role = 'student'
+  },
+  parentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Parent',    // populated when role = 'parent'
+  },
+  hodId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'HOD',       // populated when role = 'hod'
+  },
+  staffIdRef: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Staff',     // populated when role = 'staff' or 'admin'
   },
   isActive: {
     type: Boolean,

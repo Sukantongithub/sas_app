@@ -5,6 +5,7 @@ const Student = require('../models/Student');
 const Session = require('../models/Session');
 const Notification = require('../models/Notification');
 const Timetable = require('../models/Timetable');
+const Class = require('../models/Class');
 const { requireAuth, requireRoles, requireSelfOrRoles } = require('../middleware/auth');
 
 // Get all attendance records
@@ -563,23 +564,81 @@ router.get('/student/:studentId/timetable', requireAuth, requireSelfOrRoles(['st
   try {
     const { studentId } = req.params;
 
-    // Get student to find class
-    const student = await Student.findById(studentId);
+    // Try to find student by _id first, then by userId (in case frontend passes user.id)
+    let student = await Student.findById(studentId).populate('classId');
+    
     if (!student) {
-      return res.status(404).json({ message: 'Student not found' });
+      // If not found by _id, try looking up by userId
+      student = await Student.findOne({ userId: studentId }).populate('classId');
     }
 
-    // Get timetable for student's class
-    const timetable = await Timetable.find({ class: student.class })
-      .populate('subjectId', 'name code')
-      .sort({ day: 1, period: 1 });
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found. Please ensure you are logged in as a student.' });
+    }
 
-    // Group by day
-    const groupedTimetable = {};
-    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    // Get class information - either from classId reference or class name string
+    let classDoc = student.classId;
     
-    days.forEach(day => {
-      groupedTimetable[day] = timetable.filter(t => t.day === day);
+    if (!classDoc && student.class) {
+      // If classId reference doesn't exist, find by class name
+      classDoc = await Class.findOne({ name: student.class });
+    }
+
+    if (!classDoc) {
+      return res.json({
+        student: {
+          id: student._id,
+          name: student.name,
+          rollNumber: student.rollNumber,
+          class: student.class,
+        },
+        timetable: {},
+        totalPeriods: 0,
+      });
+    }
+
+    // Get all timetable entries for this class
+    const timetableEntries = await Timetable.find({ 
+      classId: classDoc._id,
+      isActive: true
+    }).populate('periods.teacherId', 'name email');
+
+    // Group by day (capitalize day names for frontend)
+    const groupedTimetable = {};
+    const dayMapping = {
+      'monday': 'Monday',
+      'tuesday': 'Tuesday',
+      'wednesday': 'Wednesday',
+      'thursday': 'Thursday',
+      'friday': 'Friday',
+      'saturday': 'Saturday',
+      'sunday': 'Sunday'
+    };
+
+    // Initialize all days
+    Object.values(dayMapping).forEach(day => {
+      groupedTimetable[day] = [];
+    });
+
+    // Process each timetable entry and flatten periods
+    let totalPeriods = 0;
+    timetableEntries.forEach(entry => {
+      const dayName = dayMapping[entry.dayOfWeek] || entry.dayOfWeek;
+      if (entry.periods && Array.isArray(entry.periods)) {
+        entry.periods.forEach(period => {
+          groupedTimetable[dayName].push({
+            periodNumber: period.periodNumber,
+            subject: period.subject,
+            startTime: period.startTime,
+            endTime: period.endTime,
+            room: period.room,
+            isLab: period.isLab,
+            teacherId: period.teacherId,
+            period: period.periodNumber // For compatibility with frontend
+          });
+          totalPeriods += 1;
+        });
+      }
     });
 
     res.json({
@@ -590,7 +649,7 @@ router.get('/student/:studentId/timetable', requireAuth, requireSelfOrRoles(['st
         class: student.class,
       },
       timetable: groupedTimetable,
-      totalPeriods: timetable.length,
+      totalPeriods: totalPeriods,
     });
   } catch (error) {
     console.error('Get timetable error:', error);
