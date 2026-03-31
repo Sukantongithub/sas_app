@@ -64,9 +64,9 @@ export default function StudentAttendanceScreen() {
   const [timeRecords, setTimeRecords] = useState<TimeRecord[]>([]);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
-  // Use user.id (User document _id) for the API call
-  // The backend middleware will handle checking if this matches the logged-in user
-  const studentId = user?.id;
+  // Use user.studentId for student-specific APIs
+  // Falls back to user.id for backward compatibility
+  const studentId = user?.studentId || user?.id;
 
   useEffect(() => {
     if (studentId) {

@@ -37,18 +37,50 @@ export default function ProfileScreen() {
 
   // Fetch student profile on mount
   const fetchStudentProfile = async () => {
-    if (!user?.studentId || !token) {
+    if (!token || !user) {
+      console.log('⚠️ Missing token or user', { tokenExists: !!token, userExists: !!user });
+      setLoadingProfile(false);
+      return;
+    }
+
+    // Extract ID - handle both string and object formats
+    let profileId = null;
+    
+    if (user?.studentId) {
+      profileId = typeof user.studentId === 'string' ? user.studentId : user.studentId?._id || user.studentId?.id;
+    } else if (user?.id) {
+      profileId = typeof user.id === 'string' ? user.id : user.id?._id || user.id?.id;
+    } else if (user?._id) {
+      profileId = typeof user._id === 'string' ? user._id : user._id?._id || user._id?.id;
+    }
+
+    console.log('🔍 User object:', { 
+      studentId: user.studentId, 
+      id: user.id, 
+      _id: user._id,
+      extractedProfileId: profileId
+    });
+
+    if (!profileId) {
+      console.log('⚠️ No valid profile ID found');
       setLoadingProfile(false);
       return;
     }
 
     try {
-      const response = await studentManagementAPI.getStudentProfile(user.studentId, token);
+      console.log('📤 Fetching profile for:', { profileId, userRole: user.role });
+      const response = await studentManagementAPI.getStudentProfile(profileId, token);
+      console.log('📥 Profile Response:', response);
+      
       if (response?.success && response.data) {
+        console.log('✅ Student Profile Set:', response.data);
+        console.log('   Parent Details:', response.data.parentDetails);
         setStudentProfile(response.data);
+      } else {
+        console.warn('❌ Response not successful:', response);
       }
     } catch (error) {
-      console.error('Error fetching student profile:', error);
+      console.error('❌ Error fetching student profile:', error);
     } finally {
       setLoadingProfile(false);
     }
@@ -57,10 +89,10 @@ export default function ProfileScreen() {
   useEffect(() => {
     console.log('ProfileScreen mounted');
     console.log('User:', user);
-    console.log('Logout function type:', typeof logout);
-    console.log('Logout function:', logout);
+    const profileId = user?.studentId || user?.id;
+    console.log('Profile ID:', profileId);
     fetchStudentProfile();
-  }, [user?.studentId, token]);
+  }, [user?.studentId || user?.id, token]);
 
   const handleLogout = async () => {
     console.log('===== LOGOUT BUTTON CLICKED =====');
@@ -267,7 +299,7 @@ export default function ProfileScreen() {
 
                 {/* Parent Information */}
                 <ThemedText type="subtitle" style={styles.sectionTitle}>
-                  Parent Details
+                  Parent/Guardian Details
                 </ThemedText>
 
                 <View style={[styles.infoCard, { marginHorizontal: 16 }]}>
@@ -275,38 +307,32 @@ export default function ProfileScreen() {
                     <View style={styles.loadingContainer}>
                       <ActivityIndicator size="small" color={colors.tint} />
                     </View>
-                  ) : (
+                  ) : studentProfile?.parentDetails && studentProfile.parentDetails.length > 0 ? (
                     <>
-                      {(studentProfile?.parentName || studentProfile?.fatherName) && (
-                        <View style={[styles.infoRow, (studentProfile?.motherName || studentProfile?.parentNames) ? styles.infoRowBorder : {}]}>
-                          <IconSymbol name="person.2.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
+                      {studentProfile.parentDetails.map((parent: any, index: number) => (
+                        <View 
+                          key={parent._id || index}
+                          style={[
+                            styles.infoRow, 
+                            index < studentProfile.parentDetails.length - 1 ? styles.infoRowBorder : {}
+                          ]}>
+                          <IconSymbol name="person.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
                           <View style={styles.infoContent}>
-                            <ThemedText style={styles.infoLabel}>Father</ThemedText>
-                            <ThemedText style={styles.infoValue}>{studentProfile.fatherName || studentProfile.parentName}</ThemedText>
+                            <ThemedText style={styles.infoLabel}>{parent.name}</ThemedText>
+                            <ThemedText style={styles.infoValue}>
+                              {parent.mobileNumber ? `📞 ${parent.mobileNumber}` : 'No phone'}
+                            </ThemedText>
+                            {parent.email && (
+                              <ThemedText style={[styles.infoValue, { fontSize: 12, marginTop: 2 }]}>
+                                📧 {parent.email}
+                              </ThemedText>
+                            )}
                           </View>
                         </View>
-                      )}
-
-                      {studentProfile?.motherName && (
-                        <View style={styles.infoRow}>
-                          <IconSymbol name="person.2.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
-                          <View style={styles.infoContent}>
-                            <ThemedText style={styles.infoLabel}>Mother</ThemedText>
-                            <ThemedText style={styles.infoValue}>{studentProfile.motherName}</ThemedText>
-                          </View>
-                        </View>
-                      )}
-
-                      {studentProfile?.parentNames && studentProfile.parentNames.length > 0 && !studentProfile?.fatherName && !studentProfile?.motherName && (
-                        <View style={styles.infoRow}>
-                          <IconSymbol name="person.2.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
-                          <View style={styles.infoContent}>
-                            <ThemedText style={styles.infoLabel}>Parents</ThemedText>
-                            <ThemedText style={styles.infoValue}>{studentProfile.parentNames.join(', ')}</ThemedText>
-                          </View>
-                        </View>
-                      )}
+                      ))}
                     </>
+                  ) : (
+                    <ThemedText style={styles.infoValue}>No parent information available</ThemedText>
                   )}
                 </View>
               </>

@@ -366,7 +366,19 @@ export const studentInteractionsAPI = {
         ...authHeaders(token),
       },
     });
-    return handleResponse(response);
+    const data = await handleResponse(response);
+    // Normalize nested backend response to flat shape expected by UI
+    return {
+      isEligible: data?.eligibility?.isEligible ?? false,
+      currentPercentage: data?.attendance?.currentPercentage ?? 0,
+      requiredPercentage: data?.attendance?.requiredPercentage ?? 75,
+      totalClasses: data?.attendance?.totalClasses ?? 0,
+      presentCount: data?.attendance?.present ?? 0,
+      absentCount: data?.attendance?.absent ?? 0,
+      classesNeeded: data?.attendance?.classesNeededForEligibility ?? 0,
+      message: data?.message ?? '',
+      blockers: data?.blockers ?? [],
+    };
   },
 
   // Notifications & Low Attendance
@@ -376,7 +388,15 @@ export const studentInteractionsAPI = {
         ...authHeaders(token),
       },
     });
-    return handleResponse(response);
+    const data = await handleResponse(response);
+    // Normalize nested backend response to flat shape expected by UI
+    return {
+      hasLowAttendance: data?.status !== 'normal',
+      percentage: data?.attendance?.percentage ?? 0,
+      threshold: data?.thresholds?.warning ?? 75,
+      message: data?.message ?? '',
+      status: data?.status ?? 'normal',
+    };
   },
 
   getNotifications: async (studentId: string, params?: { unreadOnly?: boolean; type?: string }, token?: string) => {
@@ -472,6 +492,15 @@ export const messagingAPI = {
       : `${API_BASE_URL}/messages/${userId}/conversations`;
 
     const response = await fetchWithTimeout(url, {
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+
+  // Get all users the current user can message (role-filtered server-side)
+  getMessageableUsers: async (search?: string, token?: string) => {
+    const params = search ? `?search=${encodeURIComponent(search)}` : '';
+    const response = await fetchWithTimeout(`${API_BASE_URL}/messages/users${params}`, {
       headers: authHeaders(token),
     });
     return handleResponse(response);
@@ -583,6 +612,13 @@ export const studentManagementAPI = {
       : `${API_BASE_URL}/student-management/list`;
 
     const response = await fetchWithTimeout(url, {
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+
+  getMyChildren: async (token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/student-management/my-children`, {
       headers: authHeaders(token),
     });
     return handleResponse(response);
