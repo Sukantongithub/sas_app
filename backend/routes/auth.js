@@ -84,10 +84,12 @@ router.post('/login',
   async (req, res) => {
     try {
       const { email, password } = req.body;
-      console.log('[LOGIN DEBUG] email:', JSON.stringify(email), '| passwordLength:', password?.length);
+      console.log('[LOGIN DEBUG] Received request - email:', JSON.stringify(email), '| passwordLength:', password?.length);
 
       // Find user
       const user = await User.findOne({ email: email.toLowerCase().trim() }).populate('studentId');
+      console.log('[LOGIN DEBUG] User lookup result:', user ? 'FOUND' : 'NOT FOUND', 'role:', user?.role);
+      
       if (!user) {
         console.log('[LOGIN DEBUG] No user found for email:', email);
         return res.status(401).json({ message: 'Invalid email or password' });
@@ -95,37 +97,50 @@ router.post('/login',
 
       // Check if user is active
       if (!user.isActive) {
+        console.log('[LOGIN DEBUG] User inactive');
         return res.status(403).json({ message: 'Account is disabled. Contact administrator.' });
       }
 
       // Verify password
       const isMatch = await user.comparePassword(password);
-      console.log('[LOGIN DEBUG] passwordMatch:', isMatch, '| role:', user.role);
+      console.log('[LOGIN DEBUG] Password match:', isMatch, '| role:', user.role);
 
       if (!isMatch) {
+        console.log('[LOGIN DEBUG] Password mismatch');
         return res.status(401).json({ message: 'Invalid email or password' });
       }
 
       // Generate JWT token
       const token = generateToken(user._id);
+      console.log('[LOGIN DEBUG] Token generated:', token.substring(0, 20) + '...');
 
       // Update last login
       user.lastLogin = new Date();
       await user.save();
 
-      res.json({
+      const responseData = {
         message: 'Login successful',
         token,
         user: {
           id: user._id,
+          _id: user._id,
           name: user.name,
           email: user.email,
           role: user.role,
-          studentId: user.studentId,
+          studentId: user.studentId?._id || user.studentId,
           lastLogin: user.lastLogin
         }
+      };
+      
+      console.log('[LOGIN DEBUG] Sending response:', {
+        hasToken: !!responseData.token,
+        userId: responseData.user.id,
+        role: responseData.user.role
       });
+
+      res.json(responseData);
     } catch (error) {
+      console.error('[LOGIN DEBUG] Error:', error.message);
       res.status(500).json({ message: error.message });
     }
   });
@@ -140,7 +155,7 @@ router.post('/verify', requireAuth, async (req, res) => {
         name: req.user.name,
         email: req.user.email,
         role: req.user.role,
-        studentId: req.user.studentId,
+        studentId: req.user.studentId?._id || req.user.studentId,
         lastLogin: req.user.lastLogin
       }
     });

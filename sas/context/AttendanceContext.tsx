@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Student, AttendanceRecord } from '@/types/attendance';
 import { studentsAPI, attendanceAPI } from '@/services/api';
+import { API_BASE_URL } from '@/config/apiConfig';
 import { useAuth } from '@/context/AuthContext';
 
 interface AttendanceContextType {
@@ -37,9 +38,19 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
       setLoading(true);
       setError(null);
       const data = await studentsAPI.getAll(token);
+      const studentList = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.data?.students)
+          ? data.data.students
+          : Array.isArray(data?.students)
+            ? data.students
+            : Array.isArray(data?.data)
+              ? data.data
+              : [];
+
       // Map MongoDB _id to id for compatibility
-      const mappedData = data.map((student: any) => ({
-        id: student._id,
+      const mappedData = studentList.map((student: any) => ({
+        id: student.id || student._id,
         name: student.name,
         rollNumber: student.rollNumber,
         email: student.email,
@@ -105,7 +116,7 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
 
     // Only load all students and attendance for teachers/admins
     // Students will load their own data through the student-attendance screen
-    const canViewAllData = user?.role && ['admin', 'super_admin', 'teacher', 'faculty'].includes(user.role);
+    const canViewAllData = user?.role && ['admin', 'super_admin', 'teacher', 'faculty', 'staff', 'hod'].includes(user.role);
     
     if (!canViewAllData) {
       console.log('AttendanceContext: User is student, skipping bulk data load');

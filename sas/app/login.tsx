@@ -26,9 +26,16 @@ export default function LoginScreen() {
 
     try {
       setIsLoggingIn(true);
+      console.log('[LoginScreen] Login button pressed, calling login()');
       await login(email, password);
+      console.log('[LoginScreen] Login returned successfully');
       // Navigation handled by role-based router
     } catch (error: any) {
+      console.error('[LoginScreen] Login error caught:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
       Alert.alert('Login Failed', error.message || 'Invalid credentials');
     } finally {
       setIsLoggingIn(false);

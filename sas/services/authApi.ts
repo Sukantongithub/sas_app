@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:5000/api';
+import { API_BASE_URL } from '@/config/apiConfig';
 
 const handleResponse = async (response: Response) => {
   const text = await response.text();
@@ -10,10 +10,12 @@ const handleResponse = async (response: Response) => {
   }
 
   if (!response.ok) {
-    console.error('API Error Response:', {
+    console.error('[authAPI.handleResponse] API Error:', {
       status: response.status,
+      statusText: response.statusText,
+      url: response.url,
       data: data,
-      url: response.url
+      raw: text.substring(0, 200) // first 200 chars of raw response
     });
     throw {
       response: {
@@ -24,6 +26,11 @@ const handleResponse = async (response: Response) => {
     };
   }
 
+  console.log('[authAPI.handleResponse] API Success:', {
+    status: response.status,
+    url: response.url,
+    dataKeys: Object.keys(data)
+  });
   return data;
 };
 
@@ -47,14 +54,30 @@ const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeout 
 // Auth API
 export const authAPI = {
   login: async (email: string, password: string) => {
-    const response = await fetchWithTimeout(`${API_BASE_URL}/auth/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email, password }),
-    });
-    return handleResponse(response);
+    try {
+      console.log('[authAPI.login] Sending login request to:', `${API_BASE_URL}/auth/login`);
+      const response = await fetchWithTimeout(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await handleResponse(response);
+      console.log('[authAPI.login] Success - Response structure:', {
+        hasToken: !!data.token,
+        hasUser: !!data.user,
+        keys: Object.keys(data)
+      });
+      return data;
+    } catch (error: any) {
+      console.error('[authAPI.login] Failed:', {
+        message: error.message,
+        status: error.response?.status,
+        errorData: error.response?.data || error.message
+      });
+      throw error;
+    }
   },
 
   register: async (userData: {

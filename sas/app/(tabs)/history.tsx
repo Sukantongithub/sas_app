@@ -227,7 +227,7 @@ export default function HistoryScreen() {
       {!isStudent && (
         <FlatList
           data={filteredAndSortedStudents}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.id || item._id}
           contentContainerStyle={styles.studentListContent}
           renderItem={({ item: student }) => {
             const stats = calculateStats(student.id);

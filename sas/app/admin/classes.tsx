@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   FlatList,
   Modal,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/themed-text';
@@ -18,8 +19,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/context/AuthContext';
 import AdminHeader from './AdminHeader';
-
-const API_BASE_URL = 'http://localhost:5000/api';
+import { API_BASE_URL } from '@/config/apiConfig';
 
 const DEPARTMENTS = [
   'Electronics and Communication Engineering',
@@ -84,7 +84,7 @@ export default function ClassManagementScreen() {
   const fetchClasses = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE_URL}/admin/classes`, {
+      const res = await fetch(`${API_BASE_URL}/admin/classes?isActive=true`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const result = await res.json();
@@ -163,25 +163,40 @@ export default function ClassManagementScreen() {
     }
   };
 
+  const performDeleteClass = async (id: string) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/classes/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const result = await res.json().catch(() => ({} as any));
+      if (!res.ok) throw new Error(result.message || 'Failed to deactivate class');
+      Alert.alert('Done', 'Class deactivated');
+      setClasses(prev => prev.filter(c => c._id !== id));
+      await fetchClasses();
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to deactivate class');
+    }
+  };
+
   const handleDelete = (id: string, name: string) => {
+    if (Platform.OS === 'web') {
+      const confirmed = typeof window !== 'undefined'
+        ? window.confirm(`Deactivate "${name}"? Students and timetables will be preserved.`)
+        : true;
+      if (confirmed) {
+        void performDeleteClass(id);
+      }
+      return;
+    }
+
     Alert.alert('Deactivate Class', `Deactivate "${name}"? Students and timetables will be preserved.`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Deactivate',
         style: 'destructive',
-        onPress: async () => {
-          try {
-            const res = await fetch(`${API_BASE_URL}/admin/classes/${id}`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bearer ${token}` },
-            });
-            const result = await res.json();
-            if (!res.ok) throw new Error(result.message);
-            Alert.alert('Done', 'Class deactivated');
-            await fetchClasses();
-          } catch (e: any) {
-            Alert.alert('Error', e.message);
-          }
+        onPress: () => {
+          void performDeleteClass(id);
         },
       },
     ]);

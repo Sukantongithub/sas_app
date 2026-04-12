@@ -45,7 +45,7 @@ const classSchema = new mongoose.Schema({
   // Students enrolled in this class
   students: [{
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
+    ref: 'Student'
   }],
   
   // Faculty assigned to this class

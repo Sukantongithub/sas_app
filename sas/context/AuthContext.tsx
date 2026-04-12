@@ -25,7 +25,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Load session on mount
   useEffect(() => {
     loadSession();
   }, []);
@@ -88,14 +87,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     try {
       setLoading(true);
+      console.log('[AuthContext.login] Starting login for email:', email);
+      
       const response = await authAPI.login(email, password);
+      console.log('[AuthContext.login] API Response received:', {
+        hasToken: !!response.token,
+        hasUser: !!response.user,
+        tokenLength: response.token?.length || 0,
+        userData: response.user ? { id: response.user._id, role: response.user.role, email: response.user.email } : null
+      });
 
+      if (!response.token) {
+        throw new Error('No token in response');
+      }
+      if (!response.user) {
+        throw new Error('No user data in response');
+      }
+
+      console.log('[AuthContext.login] Setting state with token and user');
       setToken(response.token);
       setUser(response.user);
+      
+      console.log('[AuthContext.login] Saving session to storage');
       await saveSession(response.token, response.user);
-      // Reset navigation state on login to start at first page
+      
+      console.log('[AuthContext.login] Resetting navigation');
       await resetNavigation();
+      
+      console.log('[AuthContext.login] Login successful!');
     } catch (error: any) {
+      console.error('[AuthContext.login] Login error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+        fullError: error
+      });
       throw new Error(error.message || 'Login failed');
     } finally {
       setLoading(false);

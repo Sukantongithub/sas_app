@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, FlatList, TouchableOpacity, View, Alert, RefreshControl } from 'react-native';
+import { StyleSheet, FlatList, TouchableOpacity, View, Alert, RefreshControl, Modal, TextInput, ScrollView } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAttendance } from '@/context/AttendanceContext';
@@ -10,18 +10,69 @@ import CommonHeader from '@/components/CommonHeader';
 
 export default function MarkAttendanceScreen() {
   const colorScheme = useColorScheme();
-  const { students, markAttendance, getTodayAttendance, error } = useAttendance();
+  const { students, markAttendance, getTodayAttendance, error, refreshStudents } = useAttendance();
   const [selectedStatus, setSelectedStatus] = useState<Record<string, 'present' | 'absent' | 'late'>>({});
   const [marking, setMarking] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [manualStudentName, setManualStudentName] = useState('');
+  const [manualStudentRoll, setManualStudentRoll] = useState('');
+  const [manualStudentClass, setManualStudentClass] = useState('');
+  const [manualStatus, setManualStatus] = useState<'present' | 'absent' | 'late'>('present');
+  const [manualRecords, setManualRecords] = useState<Array<{id: string, name: string, rollNumber: string, class: string, status: 'present' | 'absent' | 'late'}>>([]);
   
   const todayAttendance = getTodayAttendance();
   const markedStudentIds = new Set(todayAttendance.map(record => record.studentId));
 
   const onRefresh = async () => {
     setRefreshing(true);
-    // Refresh attendance data
+    try {
+      await refreshStudents();
+    } catch (err) {
+      console.error('Error refreshing students:', err);
+    }
     setTimeout(() => setRefreshing(false), 500);
+  };
+
+  const handleAddManualStudent = async () => {
+    if (!manualStudentName.trim() || !manualStudentRoll.trim()) {
+      Alert.alert('Error', 'Please fill in name and roll number');
+      return;
+    }
+
+    const newRecord = {
+      id: `manual_${Date.now()}`,
+      name: manualStudentName,
+      rollNumber: manualStudentRoll,
+      class: manualStudentClass || 'Unknown',
+      status: manualStatus
+    };
+
+    setManualRecords([...manualRecords, newRecord]);
+    
+    // Try to mark in backend
+    try {
+      await markAttendance(newRecord.id, manualStatus);
+      Alert.alert('Success', `${manualStudentName} marked as ${manualStatus}`);
+    } catch (err) {
+      // Already recorded locally
+      Alert.alert('Recorded Locally', 'Attendance saved locally (backend may be unavailable)');
+    }
+
+    // Reset form
+    setManualStudentName('');
+    setManualStudentRoll('');
+    setManualStudentClass('');
+    setManualStatus('present');
+  };
+
+  const handleMarkManualAttendance = async (recordId: string, newStatus: 'present' | 'absent' | 'late') => {
+    setManualRecords(prev => prev.map(r => r.id === recordId ? {...r, status: newStatus} : r));
+    try {
+      await markAttendance(recordId, newStatus);
+    } catch (err) {
+      console.error('Error marking attendance:', err);
+    }
   };
 
   const handleMarkAttendance = async (studentId: string, status: 'present' | 'absent' | 'late') => {
@@ -81,11 +132,17 @@ export default function MarkAttendanceScreen() {
   };
 
   const stats = {
-    total: students.length,
-    present: todayAttendance.filter(r => r.status === 'present').length,
-    absent: todayAttendance.filter(r => r.status === 'absent').length,
-    late: todayAttendance.filter(r => r.status === 'late').length,
+    total: students.length + manualRecords.length,
+    present: todayAttendance.filter(r => r.status === 'present').length + manualRecords.filter(r => r.status === 'present').length,
+    absent: todayAttendance.filter(r => r.status === 'absent').length + manualRecords.filter(r => r.status === 'absent').length,
+    late: todayAttendance.filter(r => r.status === 'late').length + manualRecords.filter(r => r.status === 'late').length,
   };
+
+  // Combine students from API and manual entries
+  const displayStudents = [
+    ...students,
+    ...manualRecords.map(r => ({...r, _id: r.id}))
+  ];
 
   return (
     <ThemedView style={styles.container}>
@@ -114,104 +171,301 @@ export default function MarkAttendanceScreen() {
       {error && (
         <ThemedView style={styles.errorBanner}>
           <IconSymbol name="exclamationmark.circle.fill" size={18} color="#ff4444" />
-          <ThemedText style={styles.errorText}>{error}</ThemedText>
+          <View style={{ flex: 1 }}>
+            <ThemedText style={styles.errorText}>{error}</ThemedText>
+            <TouchableOpacity onPress={onRefresh} style={styles.retryButton}>
+              <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
+            </TouchableOpacity>
+          </View>
         </ThemedView>
       )}
 
-      {/* Student List */}
-      <FlatList
-        data={students}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
-            onRefresh={onRefresh}
-            tintColor={Colors[colorScheme ?? 'light'].tint}
-          />
-        }
-        renderItem={({ item: student }) => {
-          const currentStatus = getStatusForStudent(student.id);
-          const isMarked = currentStatus !== null;
+      {displayStudents.length === 0 ? (
+        // Empty State with Manual Entry Option
+        <ScrollView 
+          style={{ flex: 1 }} 
+          contentContainerStyle={styles.emptyContainer}
+          refreshControl={
+            <RefreshControl 
+              refreshing={refreshing} 
+              onRefresh={onRefresh}
+              tintColor={Colors[colorScheme ?? 'light'].tint}
+            />
+          }
+        >
+          <IconSymbol name="person.crop.circle.badge.exclamationmark" size={60} color="#999" />
+          <ThemedText style={styles.emptyTitle}>No Students Available</ThemedText>
+          <ThemedText style={styles.emptySubtitle}>
+            Students data is not loading. You can manually add attendance.
+          </ThemedText>
+          <TouchableOpacity 
+            style={styles.manualButton}
+            onPress={() => setShowManualModal(true)}
+          >
+            <IconSymbol name="plus.circle.fill" size={20} color="#fff" />
+            <ThemedText style={styles.manualButtonText}>Manual Entry</ThemedText>
+          </TouchableOpacity>
 
-          return (
-            <ThemedView style={[styles.studentCard, { marginHorizontal: 16 }]}>
-              <View style={styles.studentInfo}>
-                <View style={styles.studentHeader}>
+          {manualRecords.length > 0 && (
+            <View style={styles.manualRecordsSection}>
+              <ThemedText style={styles.manualRecordsTitle}>
+                Manually Added Records ({manualRecords.length})
+              </ThemedText>
+              {manualRecords.map(record => (
+                <View key={record.id} style={styles.manualRecordCard}>
                   <View style={{ flex: 1 }}>
-                    <ThemedText type="defaultSemiBold" style={styles.studentName}>
-                      {student.name}
-                    </ThemedText>
-                    <ThemedText style={styles.studentDetails}>
-                      {student.rollNumber} • {student.class}
+                    <ThemedText style={styles.manualRecordName}>{record.name}</ThemedText>
+                    <ThemedText style={styles.manualRecordDetails}>
+                      {record.rollNumber} • {record.class}
                     </ThemedText>
                   </View>
-                  {isMarked && (
-                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(currentStatus) }]}>
-                      <ThemedText style={styles.statusBadgeText}>
-                        {currentStatus?.charAt(0).toUpperCase()}{currentStatus?.slice(1)}
+                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(record.status) }]}>
+                    <ThemedText style={styles.statusBadgeText}>
+                      {record.status?.charAt(0).toUpperCase()}{record.status?.slice(1)}
+                    </ThemedText>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+        </ScrollView>
+      ) : (
+        // Student List from API
+        <FlatList
+          data={displayStudents}
+          keyExtractor={(item) => item.id || item._id}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl 
+              refreshing={refreshing} 
+              onRefresh={onRefresh}
+              tintColor={Colors[colorScheme ?? 'light'].tint}
+            />
+          }
+          ListHeaderComponent={
+            displayStudents.length > 0 ? (
+              <TouchableOpacity 
+                style={styles.markAllButton}
+                onPress={markAllPresent}
+              >
+                <IconSymbol name="checkmark.circle.fill" size={20} color="#fff" />
+                <ThemedText style={styles.markAllButtonText}>Mark All Present</ThemedText>
+              </TouchableOpacity>
+            ) : null
+          }
+          ListFooterComponent={
+            students.length === 0 && manualRecords.length === 0 ? null : (
+              <TouchableOpacity 
+                style={styles.addManualButton}
+                onPress={() => setShowManualModal(true)}
+              >
+                <IconSymbol name="plus.circle" size={18} color="#0066cc" />
+                <ThemedText style={styles.addManualButtonText}>Add Manual Entry</ThemedText>
+              </TouchableOpacity>
+            )
+          }
+          renderItem={({ item: student }) => {
+            const studentId = student.id || student._id;
+            let currentStatus: 'present' | 'absent' | 'late' | null = null;
+            
+            if (student.status) {
+              currentStatus = student.status;
+            } else {
+              const record = todayAttendance.find(r => r.studentId === studentId);
+              currentStatus = record ? record.status : null;
+            }
+            
+            const isMarked = currentStatus !== null;
+
+            return (
+              <ThemedView style={[styles.studentCard, { marginHorizontal: 16 }]}>
+                <View style={styles.studentInfo}>
+                  <View style={styles.studentHeader}>
+                    <View style={{ flex: 1 }}>
+                      <ThemedText type="defaultSemiBold" style={styles.studentName}>
+                        {student.name}
+                      </ThemedText>
+                      <ThemedText style={styles.studentDetails}>
+                        {student.rollNumber} • {student.class}
                       </ThemedText>
                     </View>
-                  )}
+                    {isMarked && (
+                      <View style={[styles.statusBadge, { backgroundColor: getStatusColor(currentStatus) }]}>
+                        <ThemedText style={styles.statusBadgeText}>
+                          {currentStatus?.charAt(0).toUpperCase()}{currentStatus?.slice(1)}
+                        </ThemedText>
+                      </View>
+                    )}
+                  </View>
+                </View>
+
+                <View style={styles.statusButtons}>
+                  <TouchableOpacity
+                    style={[
+                      styles.statusButton,
+                      currentStatus === 'present' && styles.statusButtonActive,
+                      currentStatus === 'present' && { backgroundColor: '#4CAF50' }
+                    ]}
+                    onPress={() => {
+                      if (student.status !== undefined) {
+                        handleMarkManualAttendance(studentId, 'present');
+                      } else {
+                        handleMarkAttendance(studentId, 'present');
+                      }
+                    }}>
+                    <IconSymbol 
+                      name="checkmark" 
+                      size={20} 
+                      color={currentStatus === 'present' ? '#fff' : '#4CAF50'} 
+                    />
+                    <ThemedText style={[styles.statusButtonLabel, { color: currentStatus === 'present' ? '#fff' : '#4CAF50' }]}>
+                      Present
+                    </ThemedText>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.statusButton,
+                      currentStatus === 'late' && styles.statusButtonActive,
+                      currentStatus === 'late' && { backgroundColor: '#FF9800' }
+                    ]}
+                    onPress={() => {
+                      if (student.status !== undefined) {
+                        handleMarkManualAttendance(studentId, 'late');
+                      } else {
+                        handleMarkAttendance(studentId, 'late');
+                      }
+                    }}>
+                    <IconSymbol 
+                      name="clock" 
+                      size={20} 
+                      color={currentStatus === 'late' ? '#fff' : '#FF9800'} 
+                    />
+                    <ThemedText style={[styles.statusButtonLabel, { color: currentStatus === 'late' ? '#fff' : '#FF9800' }]}>
+                      Late
+                    </ThemedText>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.statusButton,
+                      currentStatus === 'absent' && styles.statusButtonActive,
+                      currentStatus === 'absent' && { backgroundColor: '#F44336' }
+                    ]}
+                    onPress={() => {
+                      if (student.status !== undefined) {
+                        handleMarkManualAttendance(studentId, 'absent');
+                      } else {
+                        handleMarkAttendance(studentId, 'absent');
+                      }
+                    }}>
+                    <IconSymbol 
+                      name="xmark" 
+                      size={20} 
+                      color={currentStatus === 'absent' ? '#fff' : '#F44336'} 
+                    />
+                    <ThemedText style={[styles.statusButtonLabel, { color: currentStatus === 'absent' ? '#fff' : '#F44336' }]}>
+                      Absent
+                    </ThemedText>
+                  </TouchableOpacity>
+                </View>
+              </ThemedView>
+            );
+          }}
+        />
+      )}
+
+      {/* Manual Entry Modal */}
+      <Modal
+        visible={showManualModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowManualModal(false)}
+      >
+        <ThemedView style={styles.modalOverlay}>
+          <ThemedView style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>Add Manual Attendance</ThemedText>
+              <TouchableOpacity onPress={() => setShowManualModal(false)}>
+                <IconSymbol name="xmark" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              <View style={styles.formGroup}>
+                <ThemedText style={styles.formLabel}>Student Name *</ThemedText>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="Enter student name"
+                  value={manualStudentName}
+                  onChangeText={setManualStudentName}
+                  placeholderTextColor="#999"
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <ThemedText style={styles.formLabel}>Roll Number *</ThemedText>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="Enter roll number"
+                  value={manualStudentRoll}
+                  onChangeText={setManualStudentRoll}
+                  placeholderTextColor="#999"
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <ThemedText style={styles.formLabel}>Class/Section</ThemedText>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="Enter class"
+                  value={manualStudentClass}
+                  onChangeText={setManualStudentClass}
+                  placeholderTextColor="#999"
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <ThemedText style={styles.formLabel}>Attendance Status</ThemedText>
+                <View style={styles.statusButtonsGroup}>
+                  {(['present', 'late', 'absent'] as const).map((status) => (
+                    <TouchableOpacity
+                      key={status}
+                      style={[
+                        styles.statusButtonGroup,
+                        manualStatus === status && { backgroundColor: getStatusColor(status) }
+                      ]}
+                      onPress={() => setManualStatus(status)}
+                    >
+                      <ThemedText style={[
+                        styles.statusButtonGroupText,
+                        manualStatus === status && { color: '#fff' }
+                      ]}>
+                        {status.charAt(0).toUpperCase()}{status.slice(1)}
+                      </ThemedText>
+                    </TouchableOpacity>
+                  ))}
                 </View>
               </View>
+            </ScrollView>
 
-              <View style={styles.statusButtons}>
-                <TouchableOpacity
-                  style={[
-                    styles.statusButton,
-                    currentStatus === 'present' && styles.statusButtonActive,
-                    currentStatus === 'present' && { backgroundColor: '#4CAF50' }
-                  ]}
-                  onPress={() => handleMarkAttendance(student.id, 'present')}>
-                  <IconSymbol 
-                    name="checkmark" 
-                    size={20} 
-                    color={currentStatus === 'present' ? '#fff' : '#4CAF50'} 
-                  />
-                  <ThemedText style={[styles.statusButtonLabel, { color: currentStatus === 'present' ? '#fff' : '#4CAF50' }]}>
-                    Present
-                  </ThemedText>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.statusButton,
-                    currentStatus === 'late' && styles.statusButtonActive,
-                    currentStatus === 'late' && { backgroundColor: '#FF9800' }
-                  ]}
-                  onPress={() => handleMarkAttendance(student.id, 'late')}>
-                  <IconSymbol 
-                    name="clock" 
-                    size={20} 
-                    color={currentStatus === 'late' ? '#fff' : '#FF9800'} 
-                  />
-                  <ThemedText style={[styles.statusButtonLabel, { color: currentStatus === 'late' ? '#fff' : '#FF9800' }]}>
-                    Late
-                  </ThemedText>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.statusButton,
-                    currentStatus === 'absent' && styles.statusButtonActive,
-                    currentStatus === 'absent' && { backgroundColor: '#F44336' }
-                  ]}
-                  onPress={() => handleMarkAttendance(student.id, 'absent')}>
-                  <IconSymbol 
-                    name="xmark" 
-                    size={20} 
-                    color={currentStatus === 'absent' ? '#fff' : '#F44336'} 
-                  />
-                  <ThemedText style={[styles.statusButtonLabel, { color: currentStatus === 'absent' ? '#fff' : '#F44336' }]}>
-                    Absent
-                  </ThemedText>
-                </TouchableOpacity>
-              </View>
-            </ThemedView>
-          );
-        }}
-      />
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setShowManualModal(false)}
+              >
+                <ThemedText style={styles.cancelButtonText}>Cancel</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.submitButton}
+                onPress={handleAddManualStudent}
+              >
+                <ThemedText style={styles.submitButtonText}>Add & Mark</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </ThemedView>
+        </ThemedView>
+      </Modal>
     </ThemedView>
   );
 }
@@ -397,5 +651,217 @@ const styles = StyleSheet.create({
     color: '#ff4444',
     fontSize: 13,
     flex: 1,
+  },
+  retryButton: {
+    marginTop: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(255, 68, 68, 0.2)',
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  retryButtonText: {
+    color: '#ff4444',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 40,
+    paddingBottom: 100,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    opacity: 0.6,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  manualButton: {
+    flexDirection: 'row',
+    backgroundColor: '#0066cc',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 30,
+  },
+  manualButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  addManualButton: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginVertical: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#0066cc',
+    backgroundColor: 'rgba(0, 102, 204, 0.05)',
+  },
+  addManualButtonText: {
+    color: '#0066cc',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  manualRecordsSection: {
+    marginTop: 24,
+    paddingHorizontal: 16,
+  },
+  manualRecordsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  manualRecordCard: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(128, 128, 128, 0.08)',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginBottom: 8,
+    alignItems: 'center',
+  },
+  manualRecordName: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  manualRecordDetails: {
+    fontSize: 12,
+    opacity: 0.6,
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    minHeight: '80%',
+    maxHeight: '90%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(128, 128, 128, 0.1)',
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalBody: {
+    padding: 16,
+    flex: 1,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(128, 128, 128, 0.1)',
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    backgroundColor: 'rgba(128, 128, 128, 0.15)',
+  },
+  cancelButtonText: {
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  submitButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    backgroundColor: '#0066cc',
+  },
+  submitButtonText: {
+    fontWeight: '600',
+    fontSize: 14,
+    color: '#fff',
+  },
+  formGroup: {
+    marginBottom: 16,
+  },
+  formLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  formInput: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(128, 128, 128, 0.3)',
+    fontSize: 14,
+    color: '#333',
+  },
+  statusButtonsGroup: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  statusButtonGroup: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(128, 128, 128, 0.3)',
+    alignItems: 'center',
+    backgroundColor: 'rgba(128, 128, 128, 0.08)',
+  },
+  statusButtonGroupText: {
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  markAllButton: {
+    marginHorizontal: 16,
+    marginVertical: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#4CAF50',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  markAllButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
   },
 });

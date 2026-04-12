@@ -3,6 +3,7 @@ const router = express.Router();
 const { body } = require('express-validator');
 const multer = require('multer');
 const XLSX = require('xlsx');
+const mongoose = require('mongoose');
 const User = require('../models/User');
 const Student = require('../models/Student');
 const Staff = require('../models/Staff');
@@ -67,7 +68,10 @@ const encryptDeviceId = (deviceId, secretKey = process.env.DEVICE_ENCRYPTION_KEY
  */
 router.get('/staff', requireAuth, requireRoles('super_admin', 'admin'), async (req, res) => {
   try {
-    const staff = await Staff.find()
+    const includeInactive = String(req.query.includeInactive || '').toLowerCase() === 'true';
+    const staffFilter = includeInactive ? {} : { isActive: true };
+
+    const staff = await Staff.find(staffFilter)
       .populate('userId', 'name email phone role isActive')
       .sort({ createdAt: -1 });
     
@@ -116,12 +120,31 @@ router.post('/staff',
     body('employeeId').notEmpty().withMessage('Employee ID is required'),
     body('designation').isIn(['admin', 'hod', 'staff', 'security', 'maintenance', 'office_manager']).withMessage('Invalid designation'),
     body('department').notEmpty().withMessage('Department is required'),
-    body('dateOfJoining').isISO8601().withMessage('Valid date is required')
+    body('dateOfJoining').isISO8601().withMessage('Valid date is required'),
+    body('classIds').isArray({ min: 1 }).withMessage('At least one classId is required')
   ],
   validateRequest,
   async (req, res) => {
     try {
       const { name, email, password, employeeId, designation, department, phone, address, salary, qualifications, dateOfJoining, classIds } = req.body;
+      const normalizedClassIds = [...new Set((classIds || []).map(String))];
+
+      // Validate classIds is provided and is an array with at least one element
+      if (!Array.isArray(classIds) || classIds.length === 0) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'classIds is required and must be an array with at least one element' 
+        });
+      }
+
+      // Validate all provided classes exist
+      const classCount = await Class.countDocuments({ _id: { $in: normalizedClassIds } });
+      if (classCount !== normalizedClassIds.length) {
+        return res.status(400).json({
+          success: false,
+          message: 'One or more classIds are invalid'
+        });
+      }
 
       // Check if email already exists
       const existingUser = await User.findOne({ email });
@@ -153,6 +176,7 @@ router.post('/staff',
         employeeId,
         designation,
         department,
+        assignedClassIds: normalizedClassIds,
         phone,
         address,
         salary,
@@ -164,9 +188,9 @@ router.post('/staff',
       const savedStaff = await staff.save();
 
       // Assign staff to selected classes (add to faculty array)
-      if (Array.isArray(classIds) && classIds.length > 0) {
+      if (normalizedClassIds.length > 0) {
         await Class.updateMany(
-          { _id: { $in: classIds } },
+          { _id: { $in: normalizedClassIds } },
           { $addToSet: { faculty: savedUser._id } }
         );
       }
@@ -363,6 +387,39 @@ router.put('/staff/:id',
       if (req.body.isActive !== undefined) staff.isActive = req.body.isActive;
       if (req.body.performanceRating !== undefined) staff.performanceRating = req.body.performanceRating;
 
+      // Sync staff <-> class mapping if classIds provided
+      if (req.body.classIds !== undefined) {
+        if (!Array.isArray(req.body.classIds) || req.body.classIds.length === 0) {
+          return res.status(400).json({ success: false, message: 'classIds must be a non-empty array' });
+        }
+
+        const nextClassIds = [...new Set(req.body.classIds.map(String))];
+        const nextClassCount = await Class.countDocuments({ _id: { $in: nextClassIds } });
+        if (nextClassCount !== nextClassIds.length) {
+          return res.status(400).json({ success: false, message: 'One or more classIds are invalid' });
+        }
+
+        const previousClassIds = (staff.assignedClassIds || []).map(id => id.toString());
+        const removedClassIds = previousClassIds.filter(id => !nextClassIds.includes(id));
+        const addedClassIds = nextClassIds.filter(id => !previousClassIds.includes(id));
+
+        if (removedClassIds.length > 0) {
+          await Class.updateMany(
+            { _id: { $in: removedClassIds } },
+            { $pull: { faculty: staff.userId } }
+          );
+        }
+
+        if (addedClassIds.length > 0) {
+          await Class.updateMany(
+            { _id: { $in: addedClassIds } },
+            { $addToSet: { faculty: staff.userId } }
+          );
+        }
+
+        staff.assignedClassIds = nextClassIds;
+      }
+
       staff.updatedAt = new Date();
       const updatedStaff = await staff.save();
 
@@ -392,9 +449,26 @@ router.put('/staff/:id',
  */
 router.delete('/staff/:id', requireAuth, requireRoles('super_admin', 'admin'), async (req, res) => {
   try {
-    const staff = await Staff.findById(req.params.id);
+    const { id } = req.params;
+    let staff = null;
+
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      staff = await Staff.findById(id);
+      if (!staff) {
+        staff = await Staff.findOne({ userId: id });
+      }
+    }
+
     if (!staff) {
       return res.status(404).json({ success: false, message: 'Staff member not found' });
+    }
+
+    // Remove staff user from faculty list in assigned classes
+    if (Array.isArray(staff.assignedClassIds) && staff.assignedClassIds.length > 0) {
+      await Class.updateMany(
+        { _id: { $in: staff.assignedClassIds } },
+        { $pull: { faculty: staff.userId } }
+      );
     }
 
     // Soft delete staff
@@ -402,6 +476,44 @@ router.delete('/staff/:id', requireAuth, requireRoles('super_admin', 'admin'), a
     await staff.save();
 
     // Deactivate user account
+    await User.findByIdAndUpdate(staff.userId, { isActive: false });
+
+    res.json({ success: true, message: 'Staff member deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * @route   POST /api/admin/staff/:id/delete
+ * @desc    Delete staff member (fallback for clients that cannot send DELETE)
+ * @access  Admin only
+ */
+router.post('/staff/:id/delete', requireAuth, requireRoles('super_admin', 'admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    let staff = null;
+
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      staff = await Staff.findById(id);
+      if (!staff) {
+        staff = await Staff.findOne({ userId: id });
+      }
+    }
+
+    if (!staff) {
+      return res.status(404).json({ success: false, message: 'Staff member not found' });
+    }
+
+    if (Array.isArray(staff.assignedClassIds) && staff.assignedClassIds.length > 0) {
+      await Class.updateMany(
+        { _id: { $in: staff.assignedClassIds } },
+        { $pull: { faculty: staff.userId } }
+      );
+    }
+
+    staff.isActive = false;
+    await staff.save();
     await User.findByIdAndUpdate(staff.userId, { isActive: false });
 
     res.json({ success: true, message: 'Staff member deleted successfully' });
@@ -535,6 +647,12 @@ router.post('/students',
     try {
       const { name, rollNumber, email, phone, class: studentClass, parentName, parentPhone, parentEmail, parentRelation } = req.body;
 
+      // Validate class and resolve classId before creating student
+      const resolvedClass = await Class.findOne({ name: studentClass });
+      if (!resolvedClass) {
+        return res.status(404).json({ success: false, message: `Class not found: ${studentClass}` });
+      }
+
       // ============ Create Student ============
       const student = new Student({
         name,
@@ -542,10 +660,17 @@ router.post('/students',
         email,
         phone,
         class: studentClass,
+        classId: resolvedClass._id,
         parentIds: [] // Will be populated after parent is created
       });
 
       const newStudent = await student.save();
+
+      // Always link student to class mapping
+      await Class.findByIdAndUpdate(
+        resolvedClass._id,
+        { $addToSet: { students: newStudent._id } }
+      );
 
       // ============ Create Student User Account ============
       let studentUser = null;
@@ -568,33 +693,6 @@ router.post('/students',
         newStudent.userId = studentUser._id;
         await newStudent.save();
 
-        // ============ Link Student to Class ============
-        try {
-          // Find the class by NAME matching the student's class field
-          const classDoc = await Class.findOne({ name: studentClass });
-          
-          if (classDoc) {
-            console.log('🏫 Found class:', { classId: classDoc._id, className: classDoc.name });
-            
-            // Set classId on the student
-            newStudent.classId = classDoc._id;
-            await newStudent.save();
-            
-            // Add the student User to the Class.students array
-            if (!classDoc.students.includes(studentUser._id)) {
-              classDoc.students.push(studentUser._id);
-              await classDoc.save();
-              console.log('✅ Added student to class:', { studentUserId: studentUser._id, classId: classDoc._id });
-            } else {
-              console.log('⚠️ Student already in class students array');
-            }
-          } else {
-            console.log('⚠️ Class not found for:', studentClass);
-          }
-        } catch (classLinkError) {
-          console.error('⚠️ Error linking student to class:', classLinkError.message);
-          // Continue anyway - student is created even if class linking fails
-        }
       } catch (studentUserError) {
         console.error('Error creating student user account:', studentUserError.message);
         // Continue anyway - student document is created even if user creation fails
@@ -835,12 +933,19 @@ router.post('/students/import',
 
       for (const row of studentsToCreate) {
         try {
+          const classDoc = await Class.findOne({ name: row.class });
+          if (!classDoc) {
+            rowErrors.push({ row: row.rowNumber, reason: `Class not found: ${row.class}` });
+            continue;
+          }
+
           // Save Student profile first to get its _id
           const student = new Student({
             name: row.name,
             rollNumber: row.rollNumber,
             email: row.email.toLowerCase(),
-            class: row.class
+            class: row.class,
+            classId: classDoc._id
           });
           await student.save();
 
@@ -855,6 +960,11 @@ router.post('/students/import',
             isActive: true
           });
           await user.save();
+
+          // Link student profile and class mapping
+          student.userId = user._id;
+          await student.save();
+          await Class.findByIdAndUpdate(classDoc._id, { $addToSet: { students: student._id } });
 
           createdCount++;
         } catch (rowErr) {
@@ -897,11 +1007,38 @@ router.put('/students/:id',
         return res.status(404).json({ success: false, message: 'Student not found' });
       }
 
+      const oldClassId = student.classId ? student.classId.toString() : null;
+
       if (req.body.name) student.name = req.body.name;
       if (req.body.rollNumber) student.rollNumber = req.body.rollNumber;
       if (req.body.email) student.email = req.body.email;
       if (req.body.phone) student.phone = req.body.phone;
-      if (req.body.class) student.class = req.body.class;
+
+      if (req.body.class || req.body.classId) {
+        let nextClass = null;
+
+        if (req.body.classId) {
+          nextClass = await Class.findById(req.body.classId);
+        } else if (req.body.class) {
+          nextClass = await Class.findOne({ name: req.body.class });
+        }
+
+        if (!nextClass) {
+          return res.status(404).json({ success: false, message: 'Target class not found' });
+        }
+
+        const nextClassId = nextClass._id.toString();
+        student.class = nextClass.name;
+        student.classId = nextClass._id;
+
+        if (oldClassId && oldClassId !== nextClassId) {
+          await Class.findByIdAndUpdate(oldClassId, { $pull: { students: student._id } });
+        }
+
+        if (oldClassId !== nextClassId) {
+          await Class.findByIdAndUpdate(nextClass._id, { $addToSet: { students: student._id } });
+        }
+      }
 
       const updatedStudent = await student.save();
       res.json({ success: true, message: 'Student updated successfully', data: updatedStudent });
@@ -918,15 +1055,72 @@ router.put('/students/:id',
  */
 router.delete('/students/:id', requireAuth, requireRoles('super_admin', 'admin'), async (req, res) => {
   try {
-    const student = await Student.findByIdAndDelete(req.params.id);
+    const { id } = req.params;
+    let student = null;
+
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      student = await Student.findById(id);
+      if (!student) {
+        student = await Student.findOne({ userId: id });
+      }
+    }
+
     if (!student) {
       return res.status(404).json({ success: false, message: 'Student not found' });
+    }
+
+    await Student.findByIdAndDelete(student._id);
+
+    // Remove student from class mapping
+    if (student.classId) {
+      await Class.findByIdAndUpdate(student.classId, { $pull: { students: student._id } });
     }
 
     // Delete associated attendance records
     await Attendance.deleteMany({ studentId: student._id });
 
     // Delete linked User account (matched by studentId reference or email)
+    await User.findOneAndDelete({
+      $or: [
+        { studentId: student._id },
+        { email: student.email }
+      ]
+    });
+
+    res.json({ success: true, message: 'Student and records deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * @route   POST /api/admin/students/:id/delete
+ * @desc    Delete student (fallback for clients that cannot send DELETE)
+ * @access  Admin only
+ */
+router.post('/students/:id/delete', requireAuth, requireRoles('super_admin', 'admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    let student = null;
+
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      student = await Student.findById(id);
+      if (!student) {
+        student = await Student.findOne({ userId: id });
+      }
+    }
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student not found' });
+    }
+
+    await Student.findByIdAndDelete(student._id);
+
+    if (student.classId) {
+      await Class.findByIdAndUpdate(student.classId, { $pull: { students: student._id } });
+    }
+
+    await Attendance.deleteMany({ studentId: student._id });
     await User.findOneAndDelete({
       $or: [
         { studentId: student._id },
@@ -1896,14 +2090,52 @@ router.post('/timetables',
     body('classId').notEmpty().withMessage('Class ID is required'),
     body('dayOfWeek').isIn(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])
       .withMessage('Invalid day of week'),
-    body('periods').isArray({ min: 1 }).withMessage('At least one period is required')
+    body('periods').isArray({ min: 1 }).withMessage('At least one period is required'),
+    body('periods.*.subject').trim().notEmpty().withMessage('Period subject is required'),
+    body('periods.*.startTime').matches(/^\d{2}:\d{2}$/).withMessage('Invalid start time format'),
+    body('periods.*.endTime').matches(/^\d{2}:\d{2}$/).withMessage('Invalid end time format'),
   ],
   validateRequest,
   async (req, res) => {
     try {
       const { classId, section, dayOfWeek, periods, effectiveFrom, effectiveTo } = req.body;
 
-      console.log('Creating timetable:', { classId, section, dayOfWeek, periodsCount: periods.length });
+      console.log('[CREATE_TIMETABLE] Request:', { classId, section, dayOfWeek, periodsCount: periods?.length });
+
+      // Additional validation: validate period integrity
+      for (let i = 0; i < periods.length; i++) {
+        const p = periods[i];
+        
+        // Validate subject is not date-like (prevent corruption)
+        if (/^\d{4}-\d{2}-\d{2}$/.test(p.subject)) {
+          console.error('[CREATE_TIMETABLE] Period subject looks like a date:', p.subject);
+          return res.status(400).json({
+            success: false,
+            message: `Period ${i + 1}: Subject cannot be a date format. Please enter a valid subject name.`
+          });
+        }
+
+        // Validate time range
+        const [startH, startM] = p.startTime.split(':').map(Number);
+        const [endH, endM] = p.endTime.split(':').map(Number);
+        const startMinutes = startH * 60 + startM;
+        const endMinutes = endH * 60 + endM;
+
+        if (startMinutes >= endMinutes) {
+          return res.status(400).json({
+            success: false,
+            message: `Period ${i + 1}: Start time must be before end time`
+          });
+        }
+
+        // Validate period number sequence
+        if (p.periodNumber !== i + 1) {
+          return res.status(400).json({
+            success: false,
+            message: `Period numbers must be sequential (1, 2, 3, ...)`
+          });
+        }
+      }
 
       // Check if timetable already exists for this class, section, and day
       const existing = await Timetable.findOne({ 
@@ -1914,7 +2146,7 @@ router.post('/timetables',
       });
       
       if (existing) {
-        console.log('Duplicate timetable found:', existing._id);
+        console.log('[CREATE_TIMETABLE] Duplicate found:', existing._id);
         return res.status(400).json({
           success: false,
           message: 'Active timetable already exists for this class, section, and day'
@@ -1923,9 +2155,17 @@ router.post('/timetables',
 
       const timetable = new Timetable({
         classId,
-        section: section || null,
+        section: section?.trim() || null,
         dayOfWeek,
-        periods,
+        periods: periods.map(p => ({
+          periodNumber: p.periodNumber,
+          subject: p.subject?.trim() || '',
+          teacherId: p.teacherId || null,
+          startTime: p.startTime,
+          endTime: p.endTime,
+          room: p.room?.trim() || null,
+          isLab: Boolean(p.isLab) || false
+        })),
         effectiveFrom: effectiveFrom ? new Date(effectiveFrom) : new Date(),
         effectiveTo: effectiveTo ? new Date(effectiveTo) : null,
         isActive: true,
@@ -1936,7 +2176,7 @@ router.post('/timetables',
       await savedTimetable.populate('classId', 'name semester');
       await savedTimetable.populate('periods.teacherId', 'name email');
 
-      console.log('Timetable created successfully:', savedTimetable._id);
+      console.log('[CREATE_TIMETABLE] Success:', savedTimetable._id);
 
       res.status(201).json({
         success: true,
@@ -1944,7 +2184,7 @@ router.post('/timetables',
         data: savedTimetable
       });
     } catch (error) {
-      console.error('Timetable creation error:', error);
+      console.error('[CREATE_TIMETABLE] Error:', error);
       res.status(400).json({ success: false, message: error.message });
     }
   }
@@ -1964,8 +2204,84 @@ router.put('/timetables/:id', requireAuth, requireRoles('super_admin', 'admin'),
 
     const { section, periods, effectiveFrom, effectiveTo, isActive } = req.body;
 
-    if (section !== undefined) timetable.section = section;
-    if (periods) timetable.periods = periods;
+    // Validate periods if provided
+    if (periods) {
+      if (!Array.isArray(periods) || periods.length === 0) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'At least one period is required' 
+        });
+      }
+
+      // Validate each period has required fields
+      for (let i = 0; i < periods.length; i++) {
+        const p = periods[i];
+
+        if (!p.subject?.trim()) {
+          return res.status(400).json({
+            success: false,
+            message: `Period ${i + 1}: Subject is required`
+          });
+        }
+
+        if (!p.startTime?.trim()) {
+          return res.status(400).json({
+            success: false,
+            message: `Period ${i + 1}: Start time is required`
+          });
+        }
+
+        if (!p.endTime?.trim()) {
+          return res.status(400).json({
+            success: false,
+            message: `Period ${i + 1}: End time is required`
+          });
+        }
+
+        // Validate subject is not date-like (prevent corruption)
+        if (/^\d{4}-\d{2}-\d{2}$/.test(p.subject)) {
+          console.error('[UPDATE_TIMETABLE] Period subject looks like a date:', p.subject);
+          return res.status(400).json({
+            success: false,
+            message: `Period ${i + 1}: Subject cannot be a date format. Please enter a valid subject name.`
+          });
+        }
+
+        // Validate time range
+        const [startH, startM] = p.startTime.split(':').map(Number);
+        const [endH, endM] = p.endTime.split(':').map(Number);
+        const startMinutes = startH * 60 + startM;
+        const endMinutes = endH * 60 + endM;
+
+        if (startMinutes >= endMinutes) {
+          return res.status(400).json({
+            success: false,
+            message: `Period ${i + 1}: Start time must be before end time`
+          });
+        }
+
+        // Validate period number sequence
+        if (p.periodNumber !== i + 1) {
+          return res.status(400).json({
+            success: false,
+            message: `Period numbers must be sequential (1, 2, 3, ...)`
+          });
+        }
+      }
+
+      // Update periods with consistent formatting
+      timetable.periods = periods.map(p => ({
+        periodNumber: p.periodNumber,
+        subject: p.subject?.trim() || '',
+        teacherId: p.teacherId || null,
+        startTime: p.startTime?.trim() || '',
+        endTime: p.endTime?.trim() || '',
+        room: p.room?.trim() || null,
+        isLab: Boolean(p.isLab) || false
+      }));
+    }
+
+    if (section !== undefined) timetable.section = section?.trim() || null;
     if (effectiveFrom) timetable.effectiveFrom = new Date(effectiveFrom);
     if (effectiveTo) timetable.effectiveTo = new Date(effectiveTo);
     if (isActive !== undefined) timetable.isActive = isActive;
@@ -1976,12 +2292,15 @@ router.put('/timetables/:id', requireAuth, requireRoles('super_admin', 'admin'),
     await updatedTimetable.populate('classId', 'name semester');
     await updatedTimetable.populate('periods.teacherId', 'name email');
 
+    console.log('[UPDATE_TIMETABLE] Success:', updatedTimetable._id);
+
     res.json({
       success: true,
       message: 'Timetable updated successfully',
       data: updatedTimetable
     });
   } catch (error) {
+    console.error('[UPDATE_TIMETABLE] Error:', error);
     res.status(400).json({ success: false, message: error.message });
   }
 });
@@ -1993,15 +2312,338 @@ router.put('/timetables/:id', requireAuth, requireRoles('super_admin', 'admin'),
  */
 router.delete('/timetables/:id', requireAuth, requireRoles('super_admin', 'admin'), async (req, res) => {
   try {
+    const { id } = req.params;
+    console.log('[DELETE_TIMETABLE] Request for ID:', id);
+
+    // Validate ID format
+    if (!id || !id.match(/^[0-9a-f]{24}$/i)) {
+      console.log('[DELETE_TIMETABLE] Invalid ID format:', id);
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid timetable ID format',
+        code: 'INVALID_ID'
+      });
+    }
+
+    // Check if timetable exists
+    const timetable = await Timetable.findById(id);
+    if (!timetable) {
+      console.log('[DELETE_TIMETABLE] Not found:', id);
+      return res.status(404).json({
+        success: false,
+        message: 'Timetable not found',
+        code: 'NOT_FOUND',
+        timetableId: id
+      });
+    }
+
+    console.log('[DELETE_TIMETABLE] Found timetable:', {
+      id: timetable._id,
+      class: timetable.classId,
+      day: timetable.dayOfWeek,
+      periodCount: timetable.periods.length
+    });
+
+    // Store timetable data before deletion for response
+    const deletedTimetableData = timetable.toObject();
+    
+    // Delete the timetable
+    const deleteResult = await timetable.deleteOne();
+    console.log('[DELETE_TIMETABLE] deleteOne result:', deleteResult);
+
+    // Verify deletion
+    const verifyDelete = await Timetable.findById(id);
+    console.log('[DELETE_TIMETABLE] Verify deletion - document exists after delete:', !!verifyDelete);
+
+    if (verifyDelete) {
+      console.error('[DELETE_TIMETABLE] CRITICAL: Document still exists after deleteOne()');
+      return res.status(500).json({
+        success: false,
+        message: 'Delete operation completed but document still exists',
+        code: 'DELETE_VERIFICATION_FAILED'
+      });
+    }
+
+    console.log('[DELETE_TIMETABLE] Successfully deleted:', id);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Timetable deleted successfully',
+      data: {
+        _id: deletedTimetableData._id,
+        classId: deletedTimetableData.classId,
+        section: deletedTimetableData.section,
+        dayOfWeek: deletedTimetableData.dayOfWeek,
+        periods: deletedTimetableData.periods,
+        isActive: deletedTimetableData.isActive,
+        deletedAt: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('[DELETE_TIMETABLE] Error:', {
+      name: error.name,
+      message: error.message,
+      code: error.code,
+      stack: error.stack
+    });
+
+    // Specific error handling
+    if (error.name === 'CastError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid timetable ID format',
+        code: 'INVALID_ID',
+        details: error.message
+      });
+    }
+
+    if (error.name === 'MongoError' || error.name === 'MongoServerError') {
+      return res.status(500).json({
+        success: false,
+        message: 'Database error occurred while deleting timetable',
+        code: 'DATABASE_ERROR',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+
+    // Generic error fallback
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete timetable',
+      code: 'DELETE_FAILED',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'An unexpected error occurred',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * @route   POST /api/admin/timetables/:id/periods
+ * @desc    Add a new period to a timetable
+ * @access  Admin only
+ */
+router.post('/timetables/:id/periods',
+  requireAuth,
+  requireRoles('super_admin', 'admin'),
+  [
+    body('periodNumber').isInt({ min: 1 }).withMessage('Period number must be a positive integer'),
+    body('subject').trim().notEmpty().withMessage('Subject is required'),
+    body('startTime').matches(/^\d{2}:\d{2}$/).withMessage('Start time must be in HH:MM format'),
+    body('endTime').matches(/^\d{2}:\d{2}$/).withMessage('End time must be in HH:MM format'),
+  ],
+  validateRequest,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      console.log('[ADD_PERIOD] Request:', { timetableId: id, body: req.body });
+
+      const timetable = await Timetable.findById(id);
+      if (!timetable) {
+        console.log('[ADD_PERIOD] Timetable not found:', id);
+        return res.status(404).json({ success: false, message: 'Timetable not found' });
+      }
+
+      const { periodNumber, subject, teacherId, startTime, endTime, room, isLab } = req.body;
+
+      // Check if period number already exists
+      const existingPeriod = timetable.periods.find(p => p.periodNumber === periodNumber);
+      if (existingPeriod) {
+        console.log('[ADD_PERIOD] Period number already exists:', periodNumber);
+        return res.status(400).json({
+          success: false,
+          message: `Period ${periodNumber} already exists in this timetable`
+        });
+      }
+
+      // Validate time range
+      const [startH, startM] = startTime.split(':').map(Number);
+      const [endH, endM] = endTime.split(':').map(Number);
+      const startMinutes = startH * 60 + startM;
+      const endMinutes = endH * 60 + endM;
+      
+      if (startMinutes >= endMinutes) {
+        console.log('[ADD_PERIOD] Invalid time range:', { startTime, endTime });
+        return res.status(400).json({
+          success: false,
+          message: 'Start time must be before end time'
+        });
+      }
+
+      // Add new period
+      const newPeriod = {
+        periodNumber,
+        subject: subject.trim(),
+        teacherId: teacherId || null,
+        startTime,
+        endTime,
+        room: room ? room.trim() : null,
+        isLab: isLab || false
+      };
+
+      console.log('[ADD_PERIOD] Adding new period:', newPeriod);
+      timetable.periods.push(newPeriod);
+      timetable.updatedAt = new Date();
+
+      const updatedTimetable = await timetable.save();
+      await updatedTimetable.populate('classId', 'name semester');
+      await updatedTimetable.populate('periods.teacherId', 'name email');
+
+      console.log('[ADD_PERIOD] Success - Period added to timetable:', updatedTimetable._id);
+
+      res.status(201).json({
+        success: true,
+        message: `Period ${periodNumber} added successfully`,
+        data: updatedTimetable
+      });
+    } catch (error) {
+      console.error('[ADD_PERIOD] Error:', error);
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+);
+
+/**
+ * @route   DELETE /api/admin/timetables/:id/periods/:periodNumber
+ * @desc    Delete a specific period from a timetable
+ * @access  Admin only
+ */
+router.delete('/timetables/:id/periods/:periodNumber', requireAuth, requireRoles('super_admin', 'admin'), async (req, res) => {
+  try {
+    const { id, periodNumber } = req.params;
+    console.log('[DELETE_PERIOD] Request:', { timetableId: id, periodNumber });
+
+    const timetable = await Timetable.findById(id);
+    if (!timetable) {
+      console.log('[DELETE_PERIOD] Timetable not found:', id);
+      return res.status(404).json({ success: false, message: 'Timetable not found' });
+    }
+
+    const periodNum = parseInt(periodNumber, 10);
+    if (isNaN(periodNum)) {
+      console.log('[DELETE_PERIOD] Invalid period number:', periodNumber);
+      return res.status(400).json({ success: false, message: 'Invalid period number' });
+    }
+
+    const periodIndex = timetable.periods.findIndex(p => p.periodNumber === periodNum);
+    console.log('[DELETE_PERIOD] Period search:', { periodNum, found: periodIndex !== -1, totalPeriods: timetable.periods.length });
+
+    if (periodIndex === -1) {
+      return res.status(404).json({
+        success: false,
+        message: `Period ${periodNum} not found in this timetable`
+      });
+    }
+
+    if (timetable.periods.length === 1) {
+      console.log('[DELETE_PERIOD] Cannot delete last period');
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete the last period. Delete the entire timetable instead.'
+      });
+    }
+
+    // Remove the period
+    const removedPeriod = timetable.periods[periodIndex];
+    timetable.periods.splice(periodIndex, 1);
+    console.log('[DELETE_PERIOD] Removed period:', { subject: removedPeriod.subject, number: removedPeriod.periodNumber });
+
+    // Renumber remaining periods
+    timetable.periods.forEach((period, idx) => {
+      period.periodNumber = idx + 1;
+    });
+    console.log('[DELETE_PERIOD] Renumbered periods. New count:', timetable.periods.length);
+
+    timetable.updatedAt = new Date();
+    const updatedTimetable = await timetable.save();
+    await updatedTimetable.populate('classId', 'name semester');
+    await updatedTimetable.populate('periods.teacherId', 'name email');
+
+    console.log('[DELETE_PERIOD] Success - Updated timetable:', updatedTimetable._id);
+
+    res.json({
+      success: true,
+      message: `Period ${periodNum} deleted successfully`,
+      data: updatedTimetable
+    });
+  } catch (error) {
+    console.error('[DELETE_PERIOD] Error:', error);
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * @route   PUT /api/admin/timetables/:id/periods/:periodNumber
+ * @desc    Update a specific period in a timetable
+ * @access  Admin only
+ */
+router.put('/timetables/:id/periods/:periodNumber', requireAuth, requireRoles('super_admin', 'admin'), async (req, res) => {
+  try {
     const timetable = await Timetable.findById(req.params.id);
     if (!timetable) {
       return res.status(404).json({ success: false, message: 'Timetable not found' });
     }
 
-    await timetable.deleteOne();
-    res.json({ success: true, message: 'Timetable deleted successfully' });
+    const periodNumber = parseInt(req.params.periodNumber, 10);
+    const period = timetable.periods.find(p => p.periodNumber === periodNumber);
+
+    if (!period) {
+      return res.status(404).json({
+        success: false,
+        message: `Period ${periodNumber} not found in this timetable`
+      });
+    }
+
+    const { subject, startTime, endTime, teacherId, room, isLab } = req.body;
+
+    // Update fields if provided
+    if (subject) {
+      if (!subject.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Subject cannot be empty'
+        });
+      }
+      period.subject = subject.trim();
+    }
+
+    if (startTime || endTime) {
+      const newStartTime = startTime || period.startTime;
+      const newEndTime = endTime || period.endTime;
+
+      const [startH, startM] = newStartTime.split(':').map(Number);
+      const [endH, endM] = newEndTime.split(':').map(Number);
+      const startMinutes = startH * 60 + startM;
+      const endMinutes = endH * 60 + endM;
+
+      if (startMinutes >= endMinutes) {
+        return res.status(400).json({
+          success: false,
+          message: 'Start time must be before end time'
+        });
+      }
+
+      if (startTime) period.startTime = startTime;
+      if (endTime) period.endTime = endTime;
+    }
+
+    if (teacherId !== undefined) period.teacherId = teacherId || null;
+    if (room !== undefined) period.room = room ? room.trim() : null;
+    if (isLab !== undefined) period.isLab = isLab;
+
+    timetable.updatedAt = new Date();
+    const updatedTimetable = await timetable.save();
+    await updatedTimetable.populate('periods.teacherId', 'name email');
+
+    console.log(`Period ${periodNumber} updated in timetable:`, updatedTimetable._id);
+
+    res.json({
+      success: true,
+      message: `Period ${periodNumber} updated successfully`,
+      data: updatedTimetable
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error('Period update error:', error);
+    res.status(400).json({ success: false, message: error.message });
   }
 });
 

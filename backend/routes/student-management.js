@@ -8,6 +8,7 @@ const Student = require('../models/Student');
 const User = require('../models/User');
 const Parent = require('../models/Parent');
 const Class = require('../models/Class');
+const Staff = require('../models/Staff');
 const Attendance = require('../models/Attendance');
 const Leave = require('../models/Leave');
 const Notification = require('../models/Notification');
@@ -90,12 +91,12 @@ router.get('/my-children', requireAuth, asyncHandler(async (req, res) => {
 // ============================================================================
 
 // @route   GET /api/student-management/list
-// @desc    Get all students with filters
+// @desc    Get all students with filters and attendance data
 // @access  Private (Admin, Teacher)
 router.get('/list', requireAuth, requireRoles('super_admin', 'admin', 'staff', 'hod'), asyncHandler(async (req, res) => {
   const { class: classId, department, search, page = 1, limit = 20, status = 'active' } = req.query;
 
-  let query = { role: 'student' };
+  let query = {};
 
   if (search) {
     query.$or = [
@@ -105,24 +106,68 @@ router.get('/list', requireAuth, requireRoles('super_admin', 'admin', 'staff', '
     ];
   }
 
-  if (classId) query.class = classId;
+  if (classId) query.classId = classId;
   if (department) query.department = department;
   if (status) query.isActive = status === 'active';
 
   // For staff/hod, only show students in their assigned classes
   if (req.user.role === 'staff' || req.user.role === 'hod') {
-    const staffClasses = await Class.find({ faculty: req.user._id }).select('students');
-    const studentIds = staffClasses.flatMap(c => c.students);
+    const staffRecord = await Staff.findOne({ userId: req.user._id }).select('assignedClassIds');
+    const assignedClassIds = (staffRecord?.assignedClassIds || []).map(id => id.toString());
+
+    const facultyClasses = await Class.find({ faculty: req.user._id }).select('_id students');
+    const classIds = [...new Set([
+      ...assignedClassIds,
+      ...facultyClasses.map(cls => cls._id.toString())
+    ])];
+
+    if (classIds.length === 0) {
+      return sendSuccess(res, { students: [], totalRecords: 0, page: page * 1, totalPages: 0 }, 200, 'Students retrieved');
+    }
+
+    const classDocs = await Class.find({ _id: { $in: classIds } }).select('students');
+    const studentIds = [...new Set(classDocs.flatMap(cls => (cls.students || []).map(studentId => studentId.toString())))];
     query._id = { $in: studentIds };
   }
 
-  const students = await User.find(query)
-    .select('name email rollNumber class department phone guardianContact emergencyContact isActive')
+  let students = await Student.find(query)
+    .select('name email rollNumber class classId department section year phone mobileNumber isActive _id')
     .limit(limit * 1)
     .skip((page - 1) * limit)
     .sort({ name: 1 });
 
-  const total = await User.countDocuments(query);
+  // Fetch attendance data for each student
+  students = await Promise.all(students.map(async (student) => {
+    const studentData = student.toObject();
+    try {
+      const startOfYear = new Date(new Date().getFullYear(), 0, 1);
+      const attendance = await Attendance.find({
+        studentId: student._id,
+        date: { $gte: startOfYear }
+      });
+      
+      const presentCount = attendance.filter(a => a.status === 'present').length;
+      const totalAttendance = attendance.length;
+      const attendancePercentage = totalAttendance > 0 
+        ? ((presentCount / totalAttendance) * 100).toFixed(2) 
+        : 0;
+      
+      return {
+        ...studentData,
+        attendancePercentage: parseFloat(attendancePercentage),
+        status: student.isActive ? 'active' : 'inactive'
+      };
+    } catch (err) {
+      console.error(`Error calculating attendance for student ${student._id}:`, err);
+      return {
+        ...studentData,
+        attendancePercentage: 0,
+        status: student.isActive ? 'active' : 'inactive'
+      };
+    }
+  }));
+
+  const total = await Student.countDocuments(query);
 
   sendSuccess(res, {
     students,
@@ -284,85 +329,256 @@ router.get('/:studentId/pending-requests', requireAuth, asyncHandler(async (req,
 }));
 
 // @route   GET /api/student-management/requests/approval-queue
-// @desc    Get all requests awaiting approval (for admin/teacher)
+// @desc    Get all requests awaiting approval (for admin/teacher) - UNIFIED
 // @access  Private (Admin, Teacher)
 router.get('/requests/approval-queue', requireAuth, requireRoles('super_admin', 'admin', 'staff', 'hod'), asyncHandler(async (req, res) => {
-  const { type = 'all', priority = 'all' } = req.query;
+  const { type = 'all', priority = 'all', sortBy = 'createdAt' } = req.query;
+  const OnDuty = require('../models/OnDuty');
+  const AbsenceReason = require('../models/AbsenceReason');
 
-  let query = { status: 'pending' };
+  try {
+    // Fetch different request types in parallel
+    const [leaveRequests, onDutyRequests, absenceRequests] = await Promise.all([
+      Leave.find({ status: 'pending' })
+        .populate('studentId', 'name rollNumber email class')
+        .populate('requestedBy', 'name email')
+        .lean(),
+      type === 'all' || type === 'on_duty' ? 
+        OnDuty.find({ status: 'pending' })
+          .populate('studentId', 'name rollNumber email class')
+          .populate('userId', 'name email')
+          .lean() : [],
+      type === 'all' || type === 'absence' ?
+        AbsenceReason.find({ status: 'pending' })
+          .populate('studentId', 'name rollNumber email')
+          .populate('userId', 'name email')
+          .lean() : []
+    ]);
 
-  if (type && type !== 'all') {
-    query.type = type; // 'leave', 'on_duty', 'absence'
+    // Normalize all requests to a common format
+    const normalized = [
+      ...leaveRequests.map(r => ({
+        ...r,
+        __type: 'leave',
+        requestType: 'Leave',
+        studentName: r.studentId?.name || 'Unknown',
+        reason: r.reason,
+        dates: `${new Date(r.startDate).toLocaleDateString()} - ${new Date(r.endDate).toLocaleDateString()}`,
+        urgencyScore: new Date(r.startDate) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) ? 2 : 1
+      })),
+      ...onDutyRequests.map(r => ({
+        ...r,
+        __type: 'on_duty',
+        requestType: 'On-Duty',
+        studentName: r.studentId?.name || 'Unknown',
+        reason: r.reason,
+        dates: `${new Date(r.startDate).toLocaleDateString()} - ${new Date(r.endDate).toLocaleDateString()}`,
+        urgencyScore: new Date(r.startDate) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) ? 2 : 1
+      })),
+      ...absenceRequests.map(r => ({
+        ...r,
+        __type: 'absence',
+        requestType: 'Absence Reason',
+        studentName: r.studentId?.name || 'Unknown',
+        reason: r.reason,
+        dates: new Date(r.date).toLocaleDateString(),
+        urgencyScore: 2 // Absences are usually urgent
+      }))
+    ];
+
+    // Filter by type if specified
+    let filtered = type === 'all' ? normalized : normalized.filter(r => r.__type === type);
+
+    // Filter by priority if urgent only
+    if (priority === 'urgent') {
+      filtered = filtered.filter(r => r.urgencyScore === 2);
+    }
+
+    // Sort requests
+    const sortMap = {
+      'createdAt': (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
+      'urgent': (a, b) => b.urgencyScore - a.urgencyScore,
+      'studentName': (a, b) => a.studentName.localeCompare(b.studentName),
+      'type': (a, b) => a.requestType.localeCompare(b.requestType),
+      'earliest': (a, b) => new Date(a.startDate || a.date) - new Date(b.startDate || b.date)
+    };
+
+    const sortFn = sortMap[sortBy] || sortMap.createdAt;
+    filtered.sort(sortFn);
+
+    // Group by urgency
+    const grouped = {
+      urgent: filtered.filter(r => r.urgencyScore === 2),
+      normal: filtered.filter(r => r.urgencyScore === 1),
+      stats: {
+        totalPending: filtered.length,
+        leaves: filtered.filter(r => r.__type === 'leave').length,
+        onDuty: filtered.filter(r => r.__type === 'on_duty').length,
+        absenceReasons: filtered.filter(r => r.__type === 'absence').length
+      }
+    };
+
+    sendSuccess(res, grouped, 200, 'Unified approval queue retrieved');
+  } catch (error) {
+    handleError(res, error);
   }
-
-  const requests = await Leave.find(query)
-    .populate('studentId', 'name rollNumber email class')
-    .populate('requestedBy', 'name email')
-    .sort({ createdAt: -1 });
-
-  const grouped = {
-    urgent: requests.filter(r => new Date(r.startDate) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
-    normal: requests.filter(r => new Date(r.startDate) > new Date(Date.now() + 7 * 24 * 60 * 60 * 1000))
-  };
-
-  sendSuccess(res, grouped, 200, 'Approval queue retrieved');
 }));
 
 // @route   POST /api/student-management/requests/:requestId/approve
-// @desc    Approve a student request
+// @desc    Approve a student request (works for Leave, OnDuty, Absence)
 // @access  Private (Admin, Teacher)
 router.post('/requests/:requestId/approve', requireAuth, requireRoles('super_admin', 'admin', 'staff', 'hod'), asyncHandler(async (req, res) => {
-  const { comments, priority } = req.body;
+  const { comments, requestType } = req.body;
+  const OnDuty = require('../models/OnDuty');
+  const AbsenceReason = require('../models/AbsenceReason');
 
-  const request = await findOrFail(Leave, req.params.requestId);
+  let request, Model, notificationType, message;
 
+  // Try to find the request in different models
+  if (!requestType || requestType === 'leave') {
+    request = await Leave.findById(req.params.requestId);
+    if (request) {
+      Model = Leave;
+      notificationType = 'leave_approved';
+      message = `Your ${request.leaveType || 'leave'} request from ${new Date(request.startDate).toLocaleDateString()} has been approved`;
+    }
+  }
+
+  if (!request && (!requestType || requestType === 'on_duty')) {
+    request = await OnDuty.findById(req.params.requestId);
+    if (request) {
+      Model = OnDuty;
+      notificationType = 'on_duty_approval';
+      message = `Your on-duty request from ${new Date(request.startDate).toLocaleDateString()} has been approved`;
+    }
+  }
+
+  if (!request && (!requestType || requestType === 'absence')) {
+    request = await AbsenceReason.findById(req.params.requestId);
+    if (request) {
+      Model = AbsenceReason;
+      notificationType = 'absence_reason_approved';
+      message = `Your absence reason for ${new Date(request.date).toLocaleDateString()} has been approved`;
+    }
+  }
+
+  if (!request) {
+    return res.status(404).json({ message: 'Request not found in any collection' });
+  }
+
+  if (request.status !== 'pending') {
+    return res.status(400).json({ message: 'Only pending requests can be approved' });
+  }
+
+  // Update request based on model type
   request.status = 'approved';
   request.approvedBy = req.user._id;
-  request.approvedAt = new Date();
-  if (comments) request.approverComments = comments;
-  if (priority) request.priority = priority;
+  request.approvalDate = new Date();
+  
+  if (comments) {
+    if (Model === AbsenceReason) {
+      request.reviewRemarks = comments;
+    } else {
+      request.approvalRemarks = comments;
+    }
+  }
 
   await request.save();
 
-  // Notify student
+  // Determine who to notify
+  const notifyUser = request.requestedBy || request.userId;
+
+  // Notify student/requester
   await Notification.create({
-    userId: request.requestedBy,
-    type: 'leave_approved',
+    userId: notifyUser,
+    type: notificationType,
     title: 'Request Approved',
-    message: `Your ${request.leaveType || 'leave'} request has been approved`,
+    message,
+    relatedId: request._id,
+    priority: 'high'
   });
 
-  sendSuccess(res, request, 200, 'Request approved');
+  sendSuccess(res, request, 200, 'Request approved successfully');
 }));
 
 // @route   POST /api/student-management/requests/:requestId/reject
-// @desc    Reject a student request
+// @desc    Reject a student request (works for Leave, OnDuty, Absence)
 // @access  Private (Admin, Teacher)
 router.post('/requests/:requestId/reject', requireAuth, requireRoles('super_admin', 'admin', 'staff', 'hod'), asyncHandler(async (req, res) => {
-  const { reason } = req.body;
+  const { reason, requestType } = req.body;
 
-  if (!reason) {
+  if (!reason || !reason.trim()) {
     return res.status(400).json({ message: 'Rejection reason is required' });
   }
 
-  const request = await findOrFail(Leave, req.params.requestId);
+  const OnDuty = require('../models/OnDuty');
+  const AbsenceReason = require('../models/AbsenceReason');
 
+  let request, Model, notificationType, message;
+
+  // Try to find the request in different models
+  if (!requestType || requestType === 'leave') {
+    request = await Leave.findById(req.params.requestId);
+    if (request) {
+      Model = Leave;
+      notificationType = 'leave_rejected';
+      message = `Your ${request.leaveType || 'leave'} request from ${new Date(request.startDate).toLocaleDateString()} has been rejected`;
+    }
+  }
+
+  if (!request && (!requestType || requestType === 'on_duty')) {
+    request = await OnDuty.findById(req.params.requestId);
+    if (request) {
+      Model = OnDuty;
+      notificationType = 'on_duty_rejection';
+      message = `Your on-duty request from ${new Date(request.startDate).toLocaleDateString()} has been rejected`;
+    }
+  }
+
+  if (!request && (!requestType || requestType === 'absence')) {
+    request = await AbsenceReason.findById(req.params.requestId);
+    if (request) {
+      Model = AbsenceReason;
+      notificationType = 'absence_reason_rejected';
+      message = `Your absence reason for ${new Date(request.date).toLocaleDateString()} has been rejected`;
+    }
+  }
+
+  if (!request) {
+    return res.status(404).json({ message: 'Request not found in any collection' });
+  }
+
+  if (request.status !== 'pending') {
+    return res.status(400).json({ message: 'Only pending requests can be rejected' });
+  }
+
+  // Update request
   request.status = 'rejected';
-  request.rejectedBy = req.user._id;
-  request.rejectedAt = new Date();
-  request.rejectionReason = reason;
+  request.approvedBy = req.user._id;
+  request.approvalDate = new Date();
+  
+  if (Model === AbsenceReason) {
+    request.reviewRemarks = reason;
+  } else {
+    request.approvalRemarks = reason;
+  }
 
   await request.save();
 
-  // Notify student
+  // Determine who to notify
+  const notifyUser = request.requestedBy || request.userId;
+
+  // Notify student/requester
   await Notification.create({
-    userId: request.requestedBy,
-    type: 'leave_rejected',
+    userId: notifyUser,
+    type: notificationType,
     title: 'Request Rejected',
-    message: `Your ${request.leaveType || 'leave'} request has been rejected. Reason: ${reason}`,
+    message: `${message}. Reason: ${reason}`,
+    relatedId: request._id,
+    priority: 'high'
   });
 
-  sendSuccess(res, request, 200, 'Request rejected');
+  sendSuccess(res, request, 200, 'Request rejected successfully');
 }));
 
 // ============================================================================
@@ -540,6 +756,225 @@ router.get('/:studentId/schedule', requireAuth, asyncHandler(async (req, res) =>
 
   console.log('✅ Schedule found for class:', classData.name);
   sendSuccess(res, classData?.schedule || [], 200, 'Student schedule retrieved');
+}));
+
+// ============================================================================
+// REQUEST APPROVAL STATS & BATCH OPERATIONS
+// ============================================================================
+
+// @route   GET /api/student-management/requests/approval-stats
+// @desc    Get count of pending requests by type (for dashboard badge)
+// @access  Private (Admin, Teacher)
+router.get('/requests/approval-stats', requireAuth, requireRoles('super_admin', 'admin', 'staff', 'hod'), asyncHandler(async (req, res) => {
+  const OnDuty = require('../models/OnDuty');
+  const AbsenceReason = require('../models/AbsenceReason');
+
+  try {
+    const [leaveCount, onDutyCount, absenceCount] = await Promise.all([
+      Leave.countDocuments({ status: 'pending' }),
+      OnDuty.countDocuments({ status: 'pending' }),
+      AbsenceReason.countDocuments({ status: 'pending' })
+    ]);
+
+    const total = leaveCount + onDutyCount + absenceCount;
+
+    sendSuccess(res, {
+      total,
+      byType: {
+        leaves: leaveCount,
+        onDuty: onDutyCount,
+        absenceReasons: absenceCount
+      }
+    }, 200, 'Approval stats retrieved');
+  } catch (error) {
+    handleError(res, error);
+  }
+}));
+
+// @route   POST /api/student-management/requests/batch-approve
+// @desc    Approve multiple requests at once
+// @access  Private (Admin, Teacher)
+router.post('/requests/batch-approve', requireAuth, requireRoles('super_admin', 'admin', 'staff', 'hod'), asyncHandler(async (req, res) => {
+  const { requestIds, comments } = req.body;
+
+  if (!requestIds || !Array.isArray(requestIds) || requestIds.length === 0) {
+    return res.status(400).json({ message: 'requestIds array is required' });
+  }
+
+  const OnDuty = require('../models/OnDuty');
+  const AbsenceReason = require('../models/AbsenceReason');
+
+  const results = {
+    approved: [],
+    failed: [],
+    total: requestIds.length
+  };
+
+  for (const requestId of requestIds) {
+    try {
+      let request = await Leave.findById(requestId);
+      let Model = Leave;
+      let notifyUser, notificationType, message;
+
+      if (!request) {
+        request = await OnDuty.findById(requestId);
+        Model = OnDuty;
+      }
+
+      if (!request) {
+        request = await AbsenceReason.findById(requestId);
+        Model = AbsenceReason;
+      }
+
+      if (!request) {
+        results.failed.push({ requestId, reason: 'Request not found' });
+        continue;
+      }
+
+      if (request.status !== 'pending') {
+        results.failed.push({ requestId, reason: 'Not in pending status' });
+        continue;
+      }
+
+      // Determine notification details
+      if (Model === Leave) {
+        notifyUser = request.requestedBy;
+        notificationType = 'leave_approved';
+        message = `Your ${request.leaveType || 'leave'} request has been approved`;
+      } else if (Model === OnDuty) {
+        notifyUser = request.userId;
+        notificationType = 'on_duty_approval';
+        message = `Your on-duty request has been approved`;
+      } else {
+        notifyUser = request.userId;
+        notificationType = 'absence_reason_approved';
+        message = `Your absence reason has been approved`;
+      }
+
+      // Update request
+      request.status = 'approved';
+      request.approvedBy = req.user._id;
+      request.approvalDate = new Date();
+      if (comments) {
+        if (Model === AbsenceReason) {
+          request.reviewRemarks = comments;
+        } else {
+          request.approvalRemarks = comments;
+        }
+      }
+      await request.save();
+
+      // Send notification
+      await Notification.create({
+        userId: notifyUser,
+        type: notificationType,
+        title: 'Request Approved',
+        message,
+        relatedId: request._id,
+        priority: 'high'
+      });
+
+      results.approved.push(requestId);
+    } catch (error) {
+      results.failed.push({ requestId, reason: error.message });
+    }
+  }
+
+  sendSuccess(res, results, 200, `Batch approval completed: ${results.approved.length} approved, ${results.failed.length} failed`);
+}));
+
+// @route   POST /api/student-management/requests/batch-reject
+// @desc    Reject multiple requests at once
+// @access  Private (Admin, Teacher)
+router.post('/requests/batch-reject', requireAuth, requireRoles('super_admin', 'admin', 'staff', 'hod'), asyncHandler(async (req, res) => {
+  const { requestIds, reason } = req.body;
+
+  if (!requestIds || !Array.isArray(requestIds) || requestIds.length === 0) {
+    return res.status(400).json({ message: 'requestIds array is required' });
+  }
+
+  if (!reason || !reason.trim()) {
+    return res.status(400).json({ message: 'Rejection reason is required' });
+  }
+
+  const OnDuty = require('../models/OnDuty');
+  const AbsenceReason = require('../models/AbsenceReason');
+
+  const results = {
+    rejected: [],
+    failed: [],
+    total: requestIds.length
+  };
+
+  for (const requestId of requestIds) {
+    try {
+      let request = await Leave.findById(requestId);
+      let Model = Leave;
+      let notifyUser, notificationType, message;
+
+      if (!request) {
+        request = await OnDuty.findById(requestId);
+        Model = OnDuty;
+      }
+
+      if (!request) {
+        request = await AbsenceReason.findById(requestId);
+        Model = AbsenceReason;
+      }
+
+      if (!request) {
+        results.failed.push({ requestId, reason: 'Request not found' });
+        continue;
+      }
+
+      if (request.status !== 'pending') {
+        results.failed.push({ requestId, reason: 'Not in pending status' });
+        continue;
+      }
+
+      // Determine notification details
+      if (Model === Leave) {
+        notifyUser = request.requestedBy;
+        notificationType = 'leave_rejected';
+        message = `Your ${request.leaveType || 'leave'} request has been rejected`;
+      } else if (Model === OnDuty) {
+        notifyUser = request.userId;
+        notificationType = 'on_duty_rejection';
+        message = `Your on-duty request has been rejected`;
+      } else {
+        notifyUser = request.userId;
+        notificationType = 'absence_reason_rejected';
+        message = `Your absence reason has been rejected`;
+      }
+
+      // Update request
+      request.status = 'rejected';
+      request.approvedBy = req.user._id;
+      request.approvalDate = new Date();
+      if (Model === AbsenceReason) {
+        request.reviewRemarks = reason;
+      } else {
+        request.approvalRemarks = reason;
+      }
+      await request.save();
+
+      // Send notification
+      await Notification.create({
+        userId: notifyUser,
+        type: notificationType,
+        title: 'Request Rejected',
+        message: `${message}. Reason: ${reason}`,
+        relatedId: request._id,
+        priority: 'high'
+      });
+
+      results.rejected.push(requestId);
+    } catch (error) {
+      results.failed.push({ requestId, reason: error.message });
+    }
+  }
+
+  sendSuccess(res, results, 200, `Batch rejection completed: ${results.rejected.length} rejected, ${results.failed.length} failed`);
 }));
 
 module.exports = router;

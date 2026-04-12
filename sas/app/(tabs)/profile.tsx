@@ -35,10 +35,17 @@ export default function ProfileScreen() {
   const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
 
-  // Fetch student profile on mount
+  // Fetch student profile on mount (only for students)
   const fetchStudentProfile = async () => {
     if (!token || !user) {
       console.log('⚠️ Missing token or user', { tokenExists: !!token, userExists: !!user });
+      setLoadingProfile(false);
+      return;
+    }
+
+    // Only fetch student profile if user is a student
+    if (user.role !== 'student') {
+      console.log('ℹ️ User is not a student (role:', user.role + '), skipping student profile fetch');
       setLoadingProfile(false);
       return;
     }
@@ -54,7 +61,7 @@ export default function ProfileScreen() {
       profileId = typeof user._id === 'string' ? user._id : user._id?._id || user._id?.id;
     }
 
-    console.log('🔍 User object:', { 
+    console.log('🔍 Fetching student profile - User object:', { 
       studentId: user.studentId, 
       id: user.id, 
       _id: user._id,
@@ -87,12 +94,10 @@ export default function ProfileScreen() {
   };
 
   useEffect(() => {
-    console.log('ProfileScreen mounted');
-    console.log('User:', user);
-    const profileId = user?.studentId || user?.id;
-    console.log('Profile ID:', profileId);
+    console.log('[PROFILE] ProfileScreen mounted - user role:', user?.role);
+    console.log('[PROFILE] User details:', user);
     fetchStudentProfile();
-  }, [user?.studentId || user?.id, token]);
+  }, [user?.role, token]);
 
   const handleLogout = async () => {
     console.log('===== LOGOUT BUTTON CLICKED =====');

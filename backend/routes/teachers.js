@@ -634,5 +634,147 @@ router.delete('/timetable/:timetableId', requireAuth, requireRoles('staff', 'hod
   sendSuccess(res, {}, 200, 'Timetable entry deleted');
 }));
 
+// @route   POST /api/teachers/timetable/:timetableId/periods
+// @desc    Add a new period to a timetable entry
+// @access  Private (Staff, HOD, Admin)
+router.post('/timetable/:timetableId/periods', requireAuth, requireRoles('staff', 'hod', 'super_admin', 'admin'), asyncHandler(async (req, res) => {
+  const { periodNumber, subject, startTime, endTime, teacherId, room, isLab } = req.body;
+
+  if (!periodNumber || !subject || !startTime || !endTime) {
+    return res.status(400).json({ 
+      message: 'periodNumber, subject, startTime, and endTime are required' 
+    });
+  }
+
+  const entry = await findOrFail(Timetable, req.params.timetableId);
+
+  // Check if period number already exists
+  const existingPeriod = entry.periods.find(p => p.periodNumber === periodNumber);
+  if (existingPeriod) {
+    return res.status(400).json({
+      message: `Period ${periodNumber} already exists in this timetable`
+    });
+  }
+
+  // Validate time range
+  const [startH, startM] = startTime.split(':').map(Number);
+  const [endH, endM] = endTime.split(':').map(Number);
+  const startMinutes = startH * 60 + startM;
+  const endMinutes = endH * 60 + endM;
+  
+  if (startMinutes >= endMinutes) {
+    return res.status(400).json({
+      message: 'Start time must be before end time'
+    });
+  }
+
+  // Add new period
+  const newPeriod = {
+    periodNumber,
+    subject: subject.trim(),
+    teacherId: teacherId || null,
+    startTime,
+    endTime,
+    room: room ? room.trim() : null,
+    isLab: isLab || false
+  };
+
+  entry.periods.push(newPeriod);
+  entry.updatedAt = Date.now();
+  
+  await entry.save();
+  await entry.populate('periods.teacherId', 'name email');
+
+  sendSuccess(res, entry, 201, `Period ${periodNumber} added successfully`);
+}));
+
+// @route   DELETE /api/teachers/timetable/:timetableId/periods/:periodNumber
+// @desc    Delete a specific period from a timetable entry
+// @access  Private (Staff, HOD, Admin)
+router.delete('/timetable/:timetableId/periods/:periodNumber', requireAuth, requireRoles('staff', 'hod', 'super_admin', 'admin'), asyncHandler(async (req, res) => {
+  const entry = await findOrFail(Timetable, req.params.timetableId);
+  const periodNumber = parseInt(req.params.periodNumber, 10);
+
+  const periodIndex = entry.periods.findIndex(p => p.periodNumber === periodNumber);
+  if (periodIndex === -1) {
+    return res.status(404).json({
+      message: `Period ${periodNumber} not found in this timetable`
+    });
+  }
+
+  if (entry.periods.length === 1) {
+    return res.status(400).json({
+      message: 'Cannot delete the last period. Deactivate the timetable entry instead.'
+    });
+  }
+
+  // Remove the period
+  entry.periods.splice(periodIndex, 1);
+
+  // Renumber remaining periods
+  entry.periods.forEach((period, idx) => {
+    period.periodNumber = idx + 1;
+  });
+
+  entry.updatedAt = Date.now();
+  await entry.save();
+  await entry.populate('periods.teacherId', 'name email');
+
+  sendSuccess(res, entry, 200, `Period ${periodNumber} deleted successfully`);
+}));
+
+// @route   PUT /api/teachers/timetable/:timetableId/periods/:periodNumber
+// @desc    Update a specific period in a timetable entry
+// @access  Private (Staff, HOD, Admin)
+router.put('/timetable/:timetableId/periods/:periodNumber', requireAuth, requireRoles('staff', 'hod', 'super_admin', 'admin'), asyncHandler(async (req, res) => {
+  const { subject, startTime, endTime, teacherId, room, isLab } = req.body;
+  const entry = await findOrFail(Timetable, req.params.timetableId);
+  const periodNumber = parseInt(req.params.periodNumber, 10);
+
+  const period = entry.periods.find(p => p.periodNumber === periodNumber);
+  if (!period) {
+    return res.status(404).json({
+      message: `Period ${periodNumber} not found in this timetable`
+    });
+  }
+
+  // Update fields if provided
+  if (subject) {
+    if (!subject.trim()) {
+      return res.status(400).json({ message: 'Subject cannot be empty' });
+    }
+    period.subject = subject.trim();
+  }
+
+  if (startTime || endTime) {
+    const newStartTime = startTime || period.startTime;
+    const newEndTime = endTime || period.endTime;
+
+    const [startH, startM] = newStartTime.split(':').map(Number);
+    const [endH, endM] = newEndTime.split(':').map(Number);
+    const startMinutes = startH * 60 + startM;
+    const endMinutes = endH * 60 + endM;
+
+    if (startMinutes >= endMinutes) {
+      return res.status(400).json({
+        message: 'Start time must be before end time'
+      });
+    }
+
+    if (startTime) period.startTime = startTime;
+    if (endTime) period.endTime = endTime;
+  }
+
+  if (teacherId !== undefined) period.teacherId = teacherId || null;
+  if (room !== undefined) period.room = room ? room.trim() : null;
+  if (isLab !== undefined) period.isLab = isLab;
+
+  entry.updatedAt = Date.now();
+  await entry.save();
+  await entry.populate('periods.teacherId', 'name email');
+
+  sendSuccess(res, entry, 200, `Period ${periodNumber} updated successfully`);
+}));
+
 module.exports = router;
 

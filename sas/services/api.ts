@@ -1,10 +1,11 @@
 // Update this with your machine's IP address when testing on physical device
 // Find your IP: Windows (ipconfig), Mac/Linux (ifconfig)
-const API_BASE_URL = 'http://localhost:5000/api';
+// ⚠️  IMPORTANT: Update config/apiConfig.ts with your IP address for physical device testing
+import { API_BASE_URL } from '@/config/apiConfig';
 
 // For Android Emulator use: http://10.0.2.2:5000/api
 // For iOS Simulator use: http://localhost:5000/api
-// For Physical Device use: http://YOUR_IP_ADDRESS:5000/api
+// For Physical Device use: http://YOUR_COMPUTER_IP:5000/api
 
 const authHeaders = (token?: string): Record<string, string> => {
   const headers: Record<string, string> = {};
@@ -137,7 +138,10 @@ export const attendanceAPI = {
   },
 
   getByStudent: async (studentId: string, token?: string) => {
-    const response = await fetchWithTimeout(`${API_BASE_URL}/attendance/student/${studentId}`, {
+    const safeStudentId = String(studentId || '').trim();
+    if (!safeStudentId) throw new Error('Student ID is required');
+    
+    const response = await fetchWithTimeout(`${API_BASE_URL}/attendance/student/${safeStudentId}`, {
       headers: {
         ...authHeaders(token),
       },
@@ -146,8 +150,11 @@ export const attendanceAPI = {
   },
 
   getStudentDaily: async (studentId: string, date?: string, token?: string) => {
+    const safeStudentId = String(studentId || '').trim();
+    if (!safeStudentId) throw new Error('Student ID is required');
+    
     const queryParams = date ? `?date=${date}` : '';
-    const response = await fetchWithTimeout(`${API_BASE_URL}/attendance/student/${studentId}/daily${queryParams}`, {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/attendance/student/${safeStudentId}/daily${queryParams}`, {
       headers: {
         ...authHeaders(token),
       },
@@ -156,13 +163,16 @@ export const attendanceAPI = {
   },
 
   getStudentSubjectWise: async (studentId: string, params?: { startDate?: string; endDate?: string }, token?: string) => {
+    const safeStudentId = String(studentId || '').trim();
+    if (!safeStudentId) throw new Error('Student ID is required');
+    
     const queryParams = new URLSearchParams();
     if (params?.startDate) queryParams.append('startDate', params.startDate);
     if (params?.endDate) queryParams.append('endDate', params.endDate);
     
     const url = queryParams.toString() 
-      ? `${API_BASE_URL}/attendance/student/${studentId}/subject-wise?${queryParams}`
-      : `${API_BASE_URL}/attendance/student/${studentId}/subject-wise`;
+      ? `${API_BASE_URL}/attendance/student/${safeStudentId}/subject-wise?${queryParams}`
+      : `${API_BASE_URL}/attendance/student/${safeStudentId}/subject-wise`;
     
     const response = await fetchWithTimeout(url, {
       headers: {
@@ -173,13 +183,16 @@ export const attendanceAPI = {
   },
 
   getStudentMonthly: async (studentId: string, year?: number, month?: number, token?: string) => {
+    const safeStudentId = String(studentId || '').trim();
+    if (!safeStudentId) throw new Error('Student ID is required');
+    
     const queryParams = new URLSearchParams();
     if (year) queryParams.append('year', year.toString());
     if (month) queryParams.append('month', month.toString());
     
     const url = queryParams.toString() 
-      ? `${API_BASE_URL}/attendance/student/${studentId}/monthly?${queryParams}`
-      : `${API_BASE_URL}/attendance/student/${studentId}/monthly`;
+      ? `${API_BASE_URL}/attendance/student/${safeStudentId}/monthly?${queryParams}`
+      : `${API_BASE_URL}/attendance/student/${safeStudentId}/monthly`;
     
     const response = await fetchWithTimeout(url, {
       headers: {
@@ -190,13 +203,16 @@ export const attendanceAPI = {
   },
 
   getStudentTimeRecords: async (studentId: string, params?: { startDate?: string; endDate?: string }, token?: string) => {
+    const safeStudentId = String(studentId || '').trim();
+    if (!safeStudentId) throw new Error('Student ID is required');
+    
     const queryParams = new URLSearchParams();
     if (params?.startDate) queryParams.append('startDate', params.startDate);
     if (params?.endDate) queryParams.append('endDate', params.endDate);
     
     const url = queryParams.toString() 
-      ? `${API_BASE_URL}/attendance/student/${studentId}/time-records?${queryParams}`
-      : `${API_BASE_URL}/attendance/student/${studentId}/time-records`;
+      ? `${API_BASE_URL}/attendance/student/${safeStudentId}/time-records?${queryParams}`
+      : `${API_BASE_URL}/attendance/student/${safeStudentId}/time-records`;
     
     const response = await fetchWithTimeout(url, {
       headers: {
@@ -260,7 +276,10 @@ export const attendanceAPI = {
   },
 
   getStudentTimetable: async (studentId: string, token?: string) => {
-    const response = await fetchWithTimeout(`${API_BASE_URL}/attendance/student/${studentId}/timetable`, {
+    const safeStudentId = String(studentId || '').trim();
+    if (!safeStudentId) throw new Error('Student ID is required');
+    
+    const response = await fetchWithTimeout(`${API_BASE_URL}/attendance/student/${safeStudentId}/timetable`, {
       headers: {
         ...authHeaders(token),
       },
@@ -269,7 +288,10 @@ export const attendanceAPI = {
   },
 
   downloadAttendanceReport: async (studentId: string, format: 'csv' | 'json' = 'csv', token?: string) => {
-    const response = await fetchWithTimeout(`${API_BASE_URL}/attendance/student/${studentId}/report?format=${format}`, {
+    const safeStudentId = String(studentId || '').trim();
+    if (!safeStudentId) throw new Error('Student ID is required');
+    
+    const response = await fetchWithTimeout(`${API_BASE_URL}/attendance/student/${safeStudentId}/report?format=${format}`, {
       headers: {
         ...authHeaders(token),
       },
@@ -310,14 +332,17 @@ export const studentInteractionsAPI = {
   },
 
   getAbsenceReasons: async (studentId: string, params?: { status?: string; startDate?: string; endDate?: string }, token?: string) => {
+    const safeStudentId = String(studentId || '').trim();
+    if (!safeStudentId) throw new Error('Student ID is required');
+    
     const queryParams = new URLSearchParams();
     if (params?.status) queryParams.append('status', params.status);
     if (params?.startDate) queryParams.append('startDate', params.startDate);
     if (params?.endDate) queryParams.append('endDate', params.endDate);
     
     const url = queryParams.toString()
-      ? `${API_BASE_URL}/student-interactions/absence-reasons/${studentId}?${queryParams}`
-      : `${API_BASE_URL}/student-interactions/absence-reasons/${studentId}`;
+      ? `${API_BASE_URL}/student-interactions/absence-reasons/${safeStudentId}?${queryParams}`
+      : `${API_BASE_URL}/student-interactions/absence-reasons/${safeStudentId}`;
     
     const response = await fetchWithTimeout(url, {
       headers: {
@@ -341,8 +366,11 @@ export const studentInteractionsAPI = {
   },
 
   getLeaves: async (studentId: string, status?: string, token?: string) => {
+    const safeStudentId = String(studentId || '').trim();
+    if (!safeStudentId) throw new Error('Student ID is required');
+    
     const queryParams = status ? `?status=${status}` : '';
-    const response = await fetchWithTimeout(`${API_BASE_URL}/student-interactions/leaves/${studentId}${queryParams}`, {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/student-interactions/leaves/${safeStudentId}${queryParams}`, {
       headers: {
         ...authHeaders(token),
       },
@@ -352,14 +380,17 @@ export const studentInteractionsAPI = {
 
   // Exam Eligibility
   getExamEligibility: async (studentId: string, params?: { examType?: string; startDate?: string; endDate?: string }, token?: string) => {
+    const safeStudentId = String(studentId || '').trim();
+    if (!safeStudentId) throw new Error('Student ID is required');
+    
     const queryParams = new URLSearchParams();
     if (params?.examType) queryParams.append('examType', params.examType);
     if (params?.startDate) queryParams.append('startDate', params.startDate);
     if (params?.endDate) queryParams.append('endDate', params.endDate);
     
     const url = queryParams.toString()
-      ? `${API_BASE_URL}/student-interactions/exam-eligibility/${studentId}?${queryParams}`
-      : `${API_BASE_URL}/student-interactions/exam-eligibility/${studentId}`;
+      ? `${API_BASE_URL}/student-interactions/exam-eligibility/${safeStudentId}?${queryParams}`
+      : `${API_BASE_URL}/student-interactions/exam-eligibility/${safeStudentId}`;
     
     const response = await fetchWithTimeout(url, {
       headers: {
@@ -383,7 +414,10 @@ export const studentInteractionsAPI = {
 
   // Notifications & Low Attendance
   checkLowAttendance: async (studentId: string, token?: string) => {
-    const response = await fetchWithTimeout(`${API_BASE_URL}/student-interactions/low-attendance-check/${studentId}`, {
+    const safeStudentId = String(studentId || '').trim();
+    if (!safeStudentId) throw new Error('Student ID is required');
+    
+    const response = await fetchWithTimeout(`${API_BASE_URL}/student-interactions/low-attendance-check/${safeStudentId}`, {
       headers: {
         ...authHeaders(token),
       },
@@ -400,13 +434,16 @@ export const studentInteractionsAPI = {
   },
 
   getNotifications: async (studentId: string, params?: { unreadOnly?: boolean; type?: string }, token?: string) => {
+    const safeStudentId = String(studentId || '').trim();
+    if (!safeStudentId) throw new Error('Student ID is required');
+    
     const queryParams = new URLSearchParams();
     if (params?.unreadOnly) queryParams.append('unreadOnly', 'true');
     if (params?.type) queryParams.append('type', params.type);
     
     const url = queryParams.toString()
-      ? `${API_BASE_URL}/student-interactions/notifications/${studentId}?${queryParams}`
-      : `${API_BASE_URL}/student-interactions/notifications/${studentId}`;
+      ? `${API_BASE_URL}/student-interactions/notifications/${safeStudentId}?${queryParams}`
+      : `${API_BASE_URL}/student-interactions/notifications/${safeStudentId}`;
     
     const response = await fetchWithTimeout(url, {
       headers: {
@@ -440,12 +477,15 @@ export const studentInteractionsAPI = {
   },
 
   getOnDutyRequests: async (studentId: string, status?: string, token?: string) => {
+    const safeStudentId = String(studentId || '').trim();
+    if (!safeStudentId) throw new Error('Student ID is required');
+    
     const queryParams = new URLSearchParams();
     if (status) queryParams.append('status', status);
     
     const url = queryParams.toString()
-      ? `${API_BASE_URL}/student-interactions/on-duty/${studentId}?${queryParams}`
-      : `${API_BASE_URL}/student-interactions/on-duty/${studentId}`;
+      ? `${API_BASE_URL}/student-interactions/on-duty/${safeStudentId}?${queryParams}`
+      : `${API_BASE_URL}/student-interactions/on-duty/${safeStudentId}`;
     
     const response = await fetchWithTimeout(url, {
       headers: {
@@ -678,26 +718,90 @@ export const studentManagementAPI = {
     return handleResponse(response);
   },
 
-  approveRequest: async (requestId: string, comments?: string, priority?: string, token?: string) => {
-    const response = await fetchWithTimeout(`${API_BASE_URL}/student-management/requests/${requestId}/approve`, {
-      method: 'POST',
+  approveRequest: async (requestId: string, comments?: string, priority?: string, token?: string, requestType?: string) => {
+    // Use type-specific endpoints for better error handling and features
+    let url;
+    let method = 'PUT';
+    
+    if (requestType === 'leave') {
+      url = `${API_BASE_URL}/student-interactions/leave/${requestId}/approve`;
+    } else if (requestType === 'on_duty') {
+      url = `${API_BASE_URL}/student-interactions/on-duty/${requestId}/approve`;
+    } else if (requestType === 'absence') {
+      url = `${API_BASE_URL}/student-interactions/absence-reason/${requestId}/approve`;
+    } else {
+      // Fallback to unified endpoint
+      url = `${API_BASE_URL}/student-management/requests/${requestId}/approve`;
+      method = 'POST';
+    }
+    
+    const response = await fetchWithTimeout(url, {
+      method,
       headers: {
         'Content-Type': 'application/json',
         ...authHeaders(token),
       },
-      body: JSON.stringify({ comments, priority }),
+      body: JSON.stringify({ approvalRemarks: comments, priority, requestType }),
     });
     return handleResponse(response);
   },
 
-  rejectRequest: async (requestId: string, reason: string, token?: string) => {
-    const response = await fetchWithTimeout(`${API_BASE_URL}/student-management/requests/${requestId}/reject`, {
+  rejectRequest: async (requestId: string, reason: string, token?: string, requestType?: string) => {
+    // Use type-specific endpoints for better error handling and features
+    let url;
+    let method = 'PUT';
+    
+    if (requestType === 'leave') {
+      url = `${API_BASE_URL}/student-interactions/leave/${requestId}/reject`;
+    } else if (requestType === 'on_duty') {
+      url = `${API_BASE_URL}/student-interactions/on-duty/${requestId}/reject`;
+    } else if (requestType === 'absence') {
+      url = `${API_BASE_URL}/student-interactions/absence-reason/${requestId}/reject`;
+    } else {
+      // Fallback to unified endpoint
+      url = `${API_BASE_URL}/student-management/requests/${requestId}/reject`;
+      method = 'POST';
+    }
+    
+    const response = await fetchWithTimeout(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders(token),
+      },
+      body: JSON.stringify({ approvalRemarks: reason, requestType }),
+    });
+    return handleResponse(response);
+  },
+
+  // Approval Stats & Batch Operations
+  getApprovalStats: async (token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/student-management/requests/approval-stats`, {
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+
+  batchApproveRequests: async (requestIds: string[], comments?: string, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/student-management/requests/batch-approve`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...authHeaders(token),
       },
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify({ requestIds, comments }),
+    });
+    return handleResponse(response);
+  },
+
+  batchRejectRequests: async (requestIds: string[], reason: string, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/student-management/requests/batch-reject`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders(token),
+      },
+      body: JSON.stringify({ requestIds, reason }),
     });
     return handleResponse(response);
   },
@@ -832,6 +936,155 @@ export const timetableAPI = {
     const response = await fetchWithTimeout(`${API_BASE_URL}/teachers/timetable/${timetableId}`, {
       method: 'DELETE',
       headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+
+  // Add a new period to a timetable
+  addPeriod: async (timetableId: string, data: {
+    periodNumber: number;
+    subject: string;
+    startTime: string;
+    endTime: string;
+    teacherId?: string;
+    room?: string;
+    isLab?: boolean;
+  }, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/teachers/timetable/${timetableId}/periods`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  // Delete a specific period from a timetable
+  deletePeriod: async (timetableId: string, periodNumber: number, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/teachers/timetable/${timetableId}/periods/${periodNumber}`, {
+      method: 'DELETE',
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+
+  // Update a specific period in a timetable
+  updatePeriod: async (timetableId: string, periodNumber: number, data: {
+    subject?: string;
+    startTime?: string;
+    endTime?: string;
+    teacherId?: string;
+    room?: string;
+    isLab?: boolean;
+  }, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/teachers/timetable/${timetableId}/periods/${periodNumber}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+};
+
+// Admin Timetable API (for timetable management)
+export const adminTimetableAPI = {
+  // Get all timetables
+  getAll: async (token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/admin/timetables`, {
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+
+  // Get single timetable
+  getById: async (id: string, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/admin/timetables/${id}`, {
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+
+  // Create timetable
+  create: async (data: {
+    classId: string;
+    section?: string;
+    dayOfWeek: string;
+    periods: Array<{
+      periodNumber: number;
+      subject: string;
+      startTime: string;
+      endTime: string;
+      room?: string;
+      isLab?: boolean;
+      teacherId?: string;
+    }>;
+  }, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/admin/timetables`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  // Update timetable
+  update: async (id: string, data: any, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/admin/timetables/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  // Delete timetable
+  delete: async (id: string, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/admin/timetables/${id}`, {
+      method: 'DELETE',
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+
+  // Add period to timetable
+  addPeriod: async (timetableId: string, data: {
+    periodNumber: number;
+    subject: string;
+    startTime: string;
+    endTime: string;
+    teacherId?: string;
+    room?: string;
+    isLab?: boolean;
+  }, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/admin/timetables/${timetableId}/periods`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  // Delete period from timetable
+  deletePeriod: async (timetableId: string, periodNumber: number, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/admin/timetables/${timetableId}/periods/${periodNumber}`, {
+      method: 'DELETE',
+      headers: authHeaders(token),
+    });
+    return handleResponse(response);
+  },
+
+  // Update period in timetable
+  updatePeriod: async (timetableId: string, periodNumber: number, data: {
+    subject?: string;
+    startTime?: string;
+    endTime?: string;
+    teacherId?: string;
+    room?: string;
+    isLab?: boolean;
+  }, token?: string) => {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/admin/timetables/${timetableId}/periods/${periodNumber}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+      body: JSON.stringify(data),
     });
     return handleResponse(response);
   },

@@ -12,6 +12,11 @@ const messageSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  subject: {
+    type: String,
+    trim: true,
+    default: null
+  },
   content: {
     type: String,
     required: true,

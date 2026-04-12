@@ -10,6 +10,7 @@ import {
   FlatList,
   Modal,
   Pressable,
+  Platform,
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -22,7 +23,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import AdminHeader from './AdminHeader';
 
-const API_BASE_URL = 'http://localhost:5000/api';
+import { API_BASE_URL } from '@/config/apiConfig';
 
 interface Student {
   _id: string;
@@ -60,6 +61,7 @@ export default function StudentsManagementScreen() {
   const [showForm, setShowForm] = useState(false);
   const [showClassPicker, setShowClassPicker] = useState(false);
   const [importMessage, setImportMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     rollNumber: '',
@@ -125,6 +127,64 @@ export default function StudentsManagementScreen() {
     }
   };
 
+  const blankForm = () => ({
+    name: '',
+    rollNumber: '',
+    email: '',
+    class: '',
+    phone: '',
+    parentName: '',
+    parentPhone: '',
+    parentEmail: '',
+    parentRelation: 'guardian',
+  });
+
+  // ── Open Edit Form ────────────────────────────────────────────────
+  const openEdit = (student: Student) => {
+    setEditingId(student._id);
+    setFormData({
+      name: student.name || '',
+      rollNumber: student.rollNumber || '',
+      email: student.email || '',
+      class: student.class || '',
+      phone: '',
+      parentName: '',
+      parentPhone: '',
+      parentEmail: '',
+      parentRelation: 'guardian',
+    });
+    setShowForm(true);
+  };
+
+  // ── Update Student ────────────────────────────────────────────────
+  const handleUpdateStudent = async () => {
+    if (!editingId) return;
+    if (!formData.name || !formData.rollNumber || !formData.email || !formData.class) {
+      Alert.alert('Error', 'Please fill in all required student fields');
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/students/${editingId}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+      const responseData = await response.json();
+      if (!response.ok) throw new Error(responseData.message || 'Failed to update student');
+      Alert.alert('Success', 'Student updated successfully');
+      setFormData(blankForm());
+      setEditingId(null);
+      setShowForm(false);
+      await fetchStudents();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update student');
+    }
+  };
+
+  // ── Create Student ────────────────────────────────────────────────
   const handleCreateStudent = async () => {
     if (!formData.name || !formData.rollNumber || !formData.email || !formData.class) {
       Alert.alert('Error', 'Please fill in all required student fields');
@@ -180,6 +240,7 @@ export default function StudentsManagementScreen() {
         parentEmail: '',
         parentRelation: 'guardian',
       });
+      setEditingId(null);
       setShowForm(false);
       await fetchStudents();
     } catch (error: any) {
@@ -188,7 +249,43 @@ export default function StudentsManagementScreen() {
     }
   };
 
+  const performDeleteStudent = async (id: string) => {
+    try {
+      let response = await fetch(`${API_BASE_URL}/admin/students/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      // Fallback for environments where DELETE is blocked/unsupported
+      if (!response.ok) {
+        response = await fetch(`${API_BASE_URL}/admin/students/${id}/delete`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
+
+      const result = await response.json().catch(() => ({} as any));
+      if (!response.ok) throw new Error(result.message || 'Failed to delete student');
+
+      Alert.alert('Success', 'Student deleted successfully');
+      setStudents(prev => prev.filter(s => s._id !== id));
+      await fetchStudents();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to delete student');
+    }
+  };
+
   const handleDeleteStudent = (id: string, name: string) => {
+    if (Platform.OS === 'web') {
+      const confirmed = typeof window !== 'undefined'
+        ? window.confirm(`Are you sure you want to delete ${name}?`)
+        : true;
+      if (confirmed) {
+        void performDeleteStudent(id);
+      }
+      return;
+    }
+
     Alert.alert(
       'Delete Student',
       `Are you sure you want to delete ${name}?`,
@@ -197,20 +294,8 @@ export default function StudentsManagementScreen() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: async () => {
-            try {
-              const response = await fetch(`${API_BASE_URL}/admin/students/${id}`, {
-                method: 'DELETE',
-                headers: { Authorization: `Bearer ${token}` },
-              });
-
-              if (!response.ok) throw new Error('Failed to delete student');
-
-              Alert.alert('Success', 'Student deleted successfully');
-              await fetchStudents();
-            } catch (error: any) {
-              Alert.alert('Error', error.message || 'Failed to delete student');
-            }
+          onPress: () => {
+            void performDeleteStudent(id);
           },
         },
       ]
@@ -344,9 +429,9 @@ export default function StudentsManagementScreen() {
         {showForm && (
           <View style={[styles.formContainer, { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground, borderColor: Colors[colorScheme ?? 'light'].tint }]}>
             <View style={styles.formHeader}>
-              <IconSymbol name="person.badge.plus.fill" size={28} color={Colors[colorScheme ?? 'light'].tint} />
+              <IconSymbol name={editingId ? "pencil.circle.fill" : "person.badge.plus.fill"} size={28} color={Colors[colorScheme ?? 'light'].tint} />
               <ThemedText type="defaultSemiBold" style={styles.formTitle}>
-                Create New Student
+                {editingId ? 'Edit Student' : 'Create New Student'}
               </ThemedText>
             </View>
 
@@ -570,29 +655,21 @@ export default function StudentsManagementScreen() {
                 style={[styles.button, styles.cancelButton, { backgroundColor: Colors[colorScheme ?? 'light'].border }]}
                 onPress={() => {
                   setShowForm(false);
-                  setFormData({ 
-                    name: '', 
-                    rollNumber: '', 
-                    email: '', 
-                    class: '',
-                    phone: '',
-                    parentName: '',
-                    parentPhone: '',
-                    parentEmail: '',
-                    parentRelation: 'guardian',
-                  });
+                  setFormData(blankForm());
+                  setEditingId(null);
                 }}>
+                <IconSymbol name="xmark.circle.fill" size={18} color={Colors[colorScheme ?? 'light'].textSecondary} />
                 <ThemedText style={[styles.buttonText, { color: Colors[colorScheme ?? 'light'].text }]}>Cancel</ThemedText>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.button} onPress={handleCreateStudent}>
+              <TouchableOpacity style={styles.button} onPress={editingId ? handleUpdateStudent : handleCreateStudent}>
                 <LinearGradient
                   colors={[Colors[colorScheme ?? 'light'].gradientStart, Colors[colorScheme ?? 'light'].gradientEnd]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={styles.gradientButton}>
                   <IconSymbol name="checkmark.circle.fill" size={18} color="#fff" />
-                  <ThemedText style={[styles.buttonText, { color: '#fff' }]}>Create Student</ThemedText>
+                  <ThemedText style={[styles.buttonText, { color: '#fff' }]}>{editingId ? 'Update Student' : 'Create Student'}</ThemedText>
                 </LinearGradient>
               </TouchableOpacity>
             </View>
@@ -602,17 +679,8 @@ export default function StudentsManagementScreen() {
         {!showForm && (
           <>
             <TouchableOpacity style={styles.addButtonWrapper} onPress={() => {
-              setFormData({ 
-                name: '', 
-                rollNumber: '', 
-                email: '', 
-                class: '',
-                phone: '',
-                parentName: '',
-                parentPhone: '',
-                parentEmail: '',
-                parentRelation: 'guardian',
-              });
+              setFormData(blankForm());
+              setEditingId(null);
               setShowForm(true);
             }}>
               <LinearGradient
@@ -697,6 +765,11 @@ export default function StudentsManagementScreen() {
                   </View>
                 )}
               </View>
+              <TouchableOpacity
+                style={[styles.editButton, { backgroundColor: Colors[colorScheme ?? 'light'].tint }]}
+                onPress={() => openEdit(item)}>
+                <IconSymbol name="pencil.fill" size={16} color="#fff" />
+              </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.deleteButton, { backgroundColor: Colors[colorScheme ?? 'light'].error }]}
                 onPress={() => handleDeleteStudent(item._id, item.name)}>
@@ -1058,6 +1131,14 @@ const styles = StyleSheet.create({
   statsText: {
     fontSize: 13,
     fontWeight: '600',
+  },
+  editButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
   },
   deleteButton: {
     width: 44,

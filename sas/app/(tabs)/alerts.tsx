@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { StyleSheet, View, TouchableOpacity, ActivityIndicator, RefreshControl, FlatList, TextInput, ScrollView, Modal, Alert } from 'react-native';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { StyleSheet, View, TouchableOpacity, ActivityIndicator, RefreshControl, FlatList, TextInput, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -9,7 +9,7 @@ import { useAuth } from '@/context/AuthContext';
 import { messagingAPI } from '@/services/api';
 import CommonHeader from '@/components/CommonHeader';
 
-const STAFF_ROLES = new Set(['staff', 'hod', 'teacher', 'faculty', 'hr']);
+const STAFF_ROLES: Set<string> = new Set(['staff', 'hod', 'teacher', 'faculty', 'hr']);
 
 function isStaffRole(role?: string) {
   return role ? STAFF_ROLES.has(String(role).toLowerCase()) : false;
@@ -27,7 +27,6 @@ export default function MessagesScreen() {
   const { user, token } = useAuth();
   const [messages, setMessages] = useState<any[]>([]);
   const [conversations, setConversations] = useState<any[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [view, setView] = useState<'conversations' | 'messages' | 'compose'>('conversations');
@@ -43,74 +42,116 @@ export default function MessagesScreen() {
   const [sendingBulk, setSendingBulk] = useState(false);
   const [loadingStaff, setLoadingStaff] = useState(false);
 
-  const userId = user?.id;
+  const userId = user?.id || user?._id || user?.userId;
+  const messagesRef = useRef<FlatList>(null);
+  const loggedMessagesRef = useRef<Set<string>>(new Set());
+
+  // Debug: Log user object structure on mount
+  useEffect(() => {
+    if (user) {
+      console.log('[MESSAGES] USER OBJECT:', user);
+      console.log('[MESSAGES] USER KEYS:', Object.keys(user));
+      console.log('[MESSAGES] userId from user.id:', user?.id);
+      console.log('[MESSAGES] Alternative user._id:', user?._id);
+      console.log('[MESSAGES] Alternative user.userId:', user?.userId);
+    }
+  }, [user]);
+
+  const fetchConversations = useCallback(async () => {
+    console.log('[MESSAGES] fetchConversations called with userId:', userId, 'token exists:', !!token);
+    if (!userId || !token) {
+      console.log('[MESSAGES] fetchConversations skipped - missing userId or token');
+      return;
+    }
+    setLoading(true);
+    try {
+      console.log('[MESSAGES] Calling messagingAPI.getConversations...');
+      const raw = await messagingAPI.getConversations(userId, undefined, token);
+      console.log('[MESSAGES] API response received:', raw);
+      // sendSuccess wraps: { success, data: { conversations: [...] }, message }
+      const allConversations = raw?.data?.conversations ?? raw?.conversations ?? [];
+      console.log('[MESSAGES] Setting conversations:', allConversations.length, 'conversations');
+      setConversations(allConversations);
+    } catch (error: any) {
+      console.error('[MESSAGES] Error fetching conversations:', error);
+      Alert.alert('Error', `Failed to load conversations: ${error?.message || 'Unknown error'}`);
+    } finally {
+      setLoading(false);
+    }
+  }, [userId, token]);
 
   useEffect(() => {
+    console.log('[MESSAGES] useEffect hook - userId:', userId, 'token exists:', !!token);
     if (userId && token) {
+      console.log('[MESSAGES] useEffect calling fetchConversations');
       fetchConversations();
     }
   }, [userId, token]);
 
-  const fetchStaffMembers = async () => {
+  const fetchStaffMembers = useCallback(async () => {
+    console.log('[MESSAGES] fetchStaffMembers called, token exists:', !!token);
     if (!token) return;
     setLoadingStaff(true);
     try {
       // Call the real API to get all messageable users (not just from existing conversations)
+      console.log('[MESSAGES] Calling messagingAPI.getMessageableUsers...');
       const raw = await messagingAPI.getMessageableUsers(undefined, token);
+      console.log('[MESSAGES] Staff members response:', raw);
       const users: StaffMember[] = raw?.data ?? raw ?? [];
+      console.log('[MESSAGES] Found', Array.isArray(users) ? users.length : 0, 'staff members');
       setAvailableStaff(Array.isArray(users) ? users : []);
     } catch (error) {
-      console.error('Error fetching staff members:', error);
+      console.error('[MESSAGES] Error fetching staff members:', error);
       setAvailableStaff([]);
     } finally {
       setLoadingStaff(false);
     }
-  };
+  }, [token]);
 
-  const fetchConversations = async () => {
-    if (!userId || !token) return;
+  const fetchMessages = useCallback(async (conversationId: string) => {
+    console.log('[MESSAGES] fetchMessages called for conversation:', conversationId, 'token exists:', !!token);
+    if (!token) return;
     setLoading(true);
     try {
-      const raw = await messagingAPI.getConversations(userId, undefined, token);
-      // sendSuccess wraps: { success, data: { conversations: [...] }, message }
-      const allConversations = raw?.data?.conversations ?? raw?.conversations ?? [];
-      setConversations(allConversations);
-      const unread = allConversations.reduce((sum: number, item: any) => sum + Number(item?.unreadCount || 0), 0);
-      setUnreadCount(unread);
+      console.log('[MESSAGES] Calling messagingAPI.getConversationMessages...');
+      const raw = await messagingAPI.getConversationMessages(conversationId, undefined, undefined, token);
+      console.log('[MESSAGES] Messages response:', raw);
+      const msgs = raw?.data?.messages ?? raw?.messages ?? [];
+      console.log('[MESSAGES] Setting', msgs.length, 'messages');
+      if (msgs.length > 0) {
+        console.log('[MESSAGES] First message structure:', msgs[0]);
+        console.log('[MESSAGES] Message keys:', Object.keys(msgs[0]));
+      }
+      setMessages(msgs);
+      loggedMessagesRef.current.clear();
+      // Scroll to bottom after messages load
+      setTimeout(() => {
+        messagesRef.current?.scrollToEnd({ animated: false });
+      }, 100);
     } catch (error: any) {
-      console.error('Error fetching conversations:', error);
+      console.error('[MESSAGES] Error fetching messages:', error);
+      Alert.alert('Error', `Failed to load messages: ${error?.message || 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
-  };
-
-  const fetchMessages = async (conversationId: string) => {
-    if (!token) return;
-    try {
-      const raw = await messagingAPI.getConversationMessages(conversationId, undefined, undefined, token);
-      // sendSuccess wraps: { success, data: { messages: [...] }, message }
-      setMessages(raw?.data?.messages ?? raw?.messages ?? []);
-    } catch (error: any) {
-      console.error('Error fetching messages:', error);
-    }
-  };
+  }, [token]);
 
   const handleSelectConversation = (conversation: any) => {
-    if (!isStaffRole(conversation?.participantRole)) {
-      return;
-    }
-    setSelectedConversation(conversation);
+    // Ensure conversation has participantId for message detection
+    const enrichedConversation = {
+      ...conversation,
+      participantId: conversation.participantId || conversation.otherParticipantId || conversation.recipientUserId || conversation.userId,
+    };
+    console.log('[MESSAGES] ===== OPENED CONVERSATION =====');
+    console.log('[MESSAGES] Current userId:', userId);
+    console.log('[MESSAGES] Selected conversation:', { name: conversation.participantName, keys: Object.keys(conversation), enrichedParticipantId: enrichedConversation.participantId });
+    setSelectedConversation(enrichedConversation);
     setView('messages');
     fetchMessages(conversation._id);
   };
 
   const handleSendMessage = async () => {
     if (!messageText.trim() || !selectedConversation || !token) return;
-
-    if (!isStaffRole(selectedConversation?.participantRole)) {
-      Alert.alert('Error', 'Cannot send messages to non-staff members');
-      return;
-    }
 
     const recipientId =
       selectedConversation?.participantId ||
@@ -130,7 +171,11 @@ export default function MessagesScreen() {
       setTimeout(async () => {
         try {
           await fetchMessages(selectedConversation._id);
-        } catch (fetchError: any) {
+          // Scroll to bottom to show new message
+          setTimeout(() => {
+            messagesRef.current?.scrollToEnd({ animated: true });
+          }, 100);
+        } catch {
           console.warn('Could not refresh messages after send');
         }
       }, 300);
@@ -219,13 +264,31 @@ export default function MessagesScreen() {
     setRefreshing(false);
   };
 
-  if (!user) {
+  if (!user || !token) {
+    console.log('[MESSAGES] Render - Not authenticated. user:', user?.email, 'token:', !!token);
     return (
       <ThemedView style={styles.container}>
-        <ThemedText>Loading...</ThemedText>
+        <CommonHeader title="Messages" />
+        <View style={styles.emptyState}>
+          <ThemedText style={styles.emptyText}>Please log in to access messages</ThemedText>
+        </View>
       </ThemedView>
     );
   }
+
+  if (!userId) {
+    console.log('[MESSAGES] Render - No userId available');
+    return (
+      <ThemedView style={styles.container}>
+        <CommonHeader title="Messages" />
+        <View style={styles.emptyState}>
+          <ThemedText style={styles.emptyText}>Unable to load user information</ThemedText>
+        </View>
+      </ThemedView>
+    );
+  }
+
+  console.log('[MESSAGES] Render - Main view with view state:', view, 'userId:', userId);
 
   return (
     <ThemedView style={styles.container}>
@@ -300,32 +363,90 @@ export default function MessagesScreen() {
             <View style={styles.spacer} />
           </View>
 
-          {/* Messages List */}
-          <FlatList
-            data={[...messages].reverse()}
-            keyExtractor={(item) => item._id}
-            renderItem={({ item }) => (
-              <View style={[
-                styles.messageBubble,
-                item.senderId === userId ? styles.myMessage : styles.theirMessage
-              ]}>
-                <ThemedText style={styles.messageContent}>
-                  {item.content}
-                </ThemedText>
-                <ThemedText style={styles.messageTime}>
-                  {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </ThemedText>
-              </View>
-            )}
+          {/* Messages List
+            LOGIC EXPLANATION:
+            - Backend sends messages with senderId as an OBJECT: { _id: string, name, email, role }
+            - We extract senderId._id and compare with current user's userId
+            - If they match → It's MY message (display right side, blue)
+            - If they DON'T match → It's RECEIVED (display left side, gray)
+          */}
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={Colors[colorScheme ?? 'light'].tint} />
+            </View>
+          ) : (
+            <FlatList
+              ref={messagesRef}
+              data={messages}
+              keyExtractor={(item) => item._id}
+            renderItem={({ item }) => {
+              // senderId comes as populated object: { _id, name, email, role }
+              // We need to extract _id and compare with current userId
+              const senderId = String(item.senderId?._id || item.senderId || '').trim();
+              const currentUserId = String(userId || '').trim();
+              
+              // It's my message if senderId matches current userId
+              const isMyMessage = senderId && currentUserId && senderId === currentUserId;
+              
+              // Debug logging (using ref instead of window object for React Native compatibility)
+              if (!loggedMessagesRef.current.has(item._id)) {
+                console.log('[MESSAGES] ===== MESSAGE DEBUG =====');
+                console.log('[MESSAGES] Message ID:', item._id);
+                console.log('[MESSAGES] Full senderId object:', item.senderId);
+                console.log('[MESSAGES] Extracted senderId:', senderId);
+                console.log('[MESSAGES] Current userId:', currentUserId);
+                console.log('[MESSAGES] Match?:', senderId === currentUserId);
+                console.log('[MESSAGES] Result:', isMyMessage ? 'MY MESSAGE (RIGHT)' : 'RECEIVED (LEFT)');
+                console.log('[MESSAGES] Content:', item.content?.substring(0, 40));
+                loggedMessagesRef.current.add(item._id);
+              }
+              
+              return (
+                <View style={[
+                  styles.messageRow,
+                  isMyMessage ? styles.messageRowRight : styles.messageRowLeft
+                ]}>
+                  <View style={[
+                    styles.messageBubble,
+                    isMyMessage ? styles.myMessage : styles.theirMessage
+                  ]}>
+                    <ThemedText 
+                      style={styles.messageContent}
+                      lightColor={isMyMessage ? '#fff' : '#000'}
+                      darkColor={isMyMessage ? '#fff' : '#e0e0e0'}
+                    >
+                      {item.content}
+                    </ThemedText>
+                    <ThemedText 
+                      style={styles.messageTime}
+                      lightColor={isMyMessage ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.5)'}
+                      darkColor={isMyMessage ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.5)'}
+                    >
+                      {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </ThemedText>
+                  </View>
+                </View>
+              );
+            }}
             contentContainerStyle={styles.messagesList}
+            scrollEnabled={true}
           />
+          )}
 
           {/* Message Input */}
-          <View style={styles.inputContainer}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.inputContainer}>
             <TextInput
-              style={styles.messageInput}
+              style={[
+                styles.messageInput,
+                {
+                  color: Colors[colorScheme ?? 'light'].text,
+                  backgroundColor: Colors[colorScheme ?? 'light'].cardBackground
+                }
+              ]}
               placeholder="Type a message..."
-              placeholderTextColor="#999"
+              placeholderTextColor={Colors[colorScheme ?? 'light'].tabIconDefault}
               value={messageText}
               onChangeText={setMessageText}
               multiline
@@ -341,7 +462,7 @@ export default function MessagesScreen() {
                 color={messageText.trim() ? Colors[colorScheme ?? 'light'].tint : '#ccc'}
               />
             </TouchableOpacity>
-          </View>
+          </KeyboardAvoidingView>
         </View>
       ) : (
         <View style={styles.messageView}>
@@ -357,12 +478,22 @@ export default function MessagesScreen() {
           </View>
 
           {/* Search Bar */}
-          <View style={[styles.searchContainer, { marginHorizontal: 12, marginTop: 12 }]}>
-            <IconSymbol name="magnifyingglass" size={16} color="#999" />
+          <View style={[
+            styles.searchContainer,
+            {
+              backgroundColor: Colors[colorScheme ?? 'light'].cardBackground,
+              marginHorizontal: 12,
+              marginTop: 12
+            }
+          ]}>
+            <IconSymbol name="magnifyingglass" size={16} color={Colors[colorScheme ?? 'light'].tabIconDefault} />
             <TextInput
-              style={styles.searchInput}
+              style={[
+                styles.searchInput,
+                { color: Colors[colorScheme ?? 'light'].text }
+              ]}
               placeholder="Search staff..."
-              placeholderTextColor="#999"
+              placeholderTextColor={Colors[colorScheme ?? 'light'].tabIconDefault}
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
@@ -417,11 +548,19 @@ export default function MessagesScreen() {
               </View>
 
               {/* Message Input */}
-              <View style={styles.composeInputContainer}>
+              <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={styles.composeInputContainer}>
                 <TextInput
-                  style={styles.composeInput}
+                  style={[
+                    styles.composeInput,
+                    {
+                      color: Colors[colorScheme ?? 'light'].text,
+                      backgroundColor: Colors[colorScheme ?? 'light'].cardBackground
+                    }
+                  ]}
                   placeholder="Type your message..."
-                  placeholderTextColor="#999"
+                  placeholderTextColor={Colors[colorScheme ?? 'light'].tabIconDefault}
                   value={composingMessage}
                   onChangeText={setComposingMessage}
                   multiline
@@ -441,7 +580,7 @@ export default function MessagesScreen() {
                     />
                   )}
                 </TouchableOpacity>
-              </View>
+              </KeyboardAvoidingView>
             </>
           )}
         </View>
@@ -592,32 +731,45 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   messagesList: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-  },
-  messageBubble: {
-    maxWidth: '80%',
-    marginBottom: 8,
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 12,
+  },
+  messageRow: {
+    marginBottom: 10,
+    paddingHorizontal: 4,
+  },
+  messageRowLeft: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+  },
+  messageRowRight: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+  },
+  messageBubble: {
+    maxWidth: '75%',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 16,
   },
   myMessage: {
-    alignSelf: 'flex-end',
     backgroundColor: '#007AFF',
+    borderBottomRightRadius: 4,
   },
   theirMessage: {
-    alignSelf: 'flex-start',
     backgroundColor: 'rgba(128, 128, 128, 0.15)',
+    borderBottomLeftRadius: 4,
   },
   messageContent: {
-    color: '#000',
-    fontSize: 14,
+    fontSize: 15,
+    lineHeight: 20,
   },
   messageTime: {
-    fontSize: 10,
-    opacity: 0.6,
-    marginTop: 4,
+    fontSize: 11,
+    marginTop: 6,
+    opacity: 0.8,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -631,10 +783,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    backgroundColor: 'rgba(128, 128, 128, 0.12)',
     maxHeight: 80,
     fontSize: 14,
-    color: '#000',
   },
   sendButton: {
     padding: 8,
@@ -664,7 +814,6 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(128, 128, 128, 0.12)',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -674,7 +823,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     padding: 0,
-    color: '#000',
   },
   staffSelectItem: {
     flexDirection: 'row',
@@ -737,9 +885,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    backgroundColor: 'rgba(128, 128, 128, 0.12)',
     maxHeight: 100,
     fontSize: 14,
-    color: '#000',
   },
 });

@@ -6,10 +6,12 @@ const Session = require('../models/Session');
 const Notification = require('../models/Notification');
 const Timetable = require('../models/Timetable');
 const Class = require('../models/Class');
+const Staff = require('../models/Staff');
+const User = require('../models/User');
 const { requireAuth, requireRoles, requireSelfOrRoles } = require('../middleware/auth');
 
 // Get all attendance records
-router.get('/', requireAuth, requireRoles('super_admin', 'admin', 'faculty', 'teacher'), async (req, res) => {
+router.get('/', requireAuth, requireRoles('super_admin', 'admin', 'hod', 'faculty', 'teacher', 'staff'), async (req, res) => {
   try {
     const { date, studentId } = req.query;
     let query = {};
@@ -28,7 +30,7 @@ router.get('/', requireAuth, requireRoles('super_admin', 'admin', 'faculty', 'te
 });
 
 // Get today's attendance
-router.get('/today', requireAuth, requireRoles('super_admin', 'admin', 'faculty', 'teacher'), async (req, res) => {
+router.get('/today', requireAuth, requireRoles('super_admin', 'admin', 'hod', 'faculty', 'teacher', 'staff'), async (req, res) => {
   try {
     const today = new Date().toISOString().split('T')[0];
     const records = await Attendance.find({ date: today })
@@ -42,7 +44,31 @@ router.get('/today', requireAuth, requireRoles('super_admin', 'admin', 'faculty'
 });
 
 // Get student's attendance history
-router.get('/student/:studentId', requireAuth, requireSelfOrRoles({ roles: ['super_admin', 'admin', 'faculty', 'teacher'] }), async (req, res) => {
+
+    const getFallbackSessionId = async ({ classId, date, userId, subject = 'General Attendance' }) => {
+      const targetDate = new Date(date).toISOString().split('T')[0];
+      let session = await Session.findOne({ classId, date: targetDate });
+
+      if (!session) {
+        const startTime = new Date(`${targetDate}T00:00:00.000Z`);
+        const endTime = new Date(startTime.getTime() + 60 * 60 * 1000);
+
+        session = await Session.create({
+          classId,
+          facultyId: userId,
+          subject,
+          sessionType: 'other',
+          date: targetDate,
+          startTime,
+          endTime,
+          isActive: false,
+          createdBy: userId,
+        });
+      }
+
+      return session._id;
+    };
+router.get('/student/:studentId', requireAuth, requireSelfOrRoles({ roles: ['super_admin', 'admin', 'hod', 'faculty', 'teacher', 'staff'] }), async (req, res) => {
   try {
     const records = await Attendance.find({ studentId: req.params.studentId })
       .sort({ date: -1 });
@@ -72,7 +98,7 @@ router.get('/student/:studentId', requireAuth, requireSelfOrRoles({ roles: ['sup
 // @route   GET /api/attendance/student/:studentId/daily
 // @desc    Get student's daily attendance status
 // @access  Private (Student can view own, others as per auth)
-router.get('/student/:studentId/daily', requireAuth, requireSelfOrRoles({ roles: ['super_admin', 'admin', 'faculty', 'teacher'] }), async (req, res) => {
+router.get('/student/:studentId/daily', requireAuth, requireSelfOrRoles({ roles: ['super_admin', 'admin', 'hod', 'faculty', 'teacher', 'staff'] }), async (req, res) => {
   try {
     const { date } = req.query;
     const targetDate = date || new Date().toISOString().split('T')[0];
@@ -102,7 +128,7 @@ router.get('/student/:studentId/daily', requireAuth, requireSelfOrRoles({ roles:
 // @route   GET /api/attendance/student/:studentId/subject-wise
 // @desc    Get subject/period-wise attendance for a student
 // @access  Private (Student can view own, others as per auth)
-router.get('/student/:studentId/subject-wise', requireAuth, requireSelfOrRoles({ roles: ['super_admin', 'admin', 'faculty', 'teacher'] }), async (req, res) => {
+router.get('/student/:studentId/subject-wise', requireAuth, requireSelfOrRoles({ roles: ['super_admin', 'admin', 'hod', 'faculty', 'teacher', 'staff'] }), async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     
@@ -263,10 +289,109 @@ router.get('/student/:studentId/time-records', requireAuth, requireSelfOrRoles({
   }
 });
 
-// Mark attendance (create or update)
-router.post('/', requireAuth, requireRoles('super_admin', 'admin', 'faculty', 'teacher'), async (req, res) => {
+// @route   GET /api/attendance/staff/:staffId/unmarked-students
+// @desc    Get all unmarked students in staff's assigned classes for today
+// @access  Private (Staff, HOD, Admin - can view own or all)
+router.get('/staff/:staffId/unmarked-students', requireAuth, requireRoles('super_admin', 'admin', 'hod', 'faculty', 'teacher', 'staff'), async (req, res) => {
   try {
-    const { studentId, date, status, remarks } = req.body;
+    const { date } = req.query;
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    
+    // Find staff member
+    const staff = await Staff.findOne({ userId: req.params.staffId })
+      .populate('assignedClassIds', 'name students');
+    
+    if (!staff) {
+      return res.status(404).json({ message: 'Staff member not found' });
+    }
+
+    // Get all students from assigned classes
+    const allStudentIds = [];
+    const classDetails = [];
+    
+    for (const cls of staff.assignedClassIds) {
+      classDetails.push({
+        classId: cls._id,
+        className: cls.name,
+        studentCount: cls.students?.length || 0
+      });
+      allStudentIds.push(...(cls.students || []));
+    }
+
+    // Get unique student IDs
+    const uniqueStudentIds = [...new Set(allStudentIds.map(id => id.toString()))];
+
+    // Get attendance records for today
+    const attendanceRecords = await Attendance.find({
+      studentId: { $in: uniqueStudentIds },
+      date: targetDate
+    })
+      .select('studentId status');
+
+    // Find marked students
+    const markedStudentIds = new Set(attendanceRecords.map(r => r.studentId.toString()));
+
+    // Find unmarked students
+    const unmarkedStudentIds = uniqueStudentIds.filter(id => !markedStudentIds.has(id));
+
+    // Fetch unmarked student details from Student collection
+    const unmarkedStudents = await Student.find({
+      _id: { $in: unmarkedStudentIds }
+    })
+      .select('_id name rollNumber email class section classId')
+      .sort({ rollNumber: 1 });
+
+    // Group by class for better organization
+    const studentsByClass = {};
+    for (const cls of staff.assignedClassIds) {
+      studentsByClass[cls.name] = unmarkedStudents.filter(student => 
+        cls.students?.some(s => s.toString() === student._id.toString())
+      );
+    }
+
+    res.json({
+      status: 'success',
+      date: targetDate,
+      staffInfo: {
+        staffId: staff._id,
+        employeeId: staff.employeeId,
+        department: staff.department,
+        assignedClasses: staff.assignedClassIds.length
+      },
+      summary: {
+        totalStudents: uniqueStudentIds.length,
+        markedCount: markedStudentIds.size,
+        unmarkedCount: unmarkedStudentIds.length,
+        unmarkedPercentage: uniqueStudentIds.length > 0 
+          ? ((unmarkedStudentIds.length / uniqueStudentIds.length) * 100).toFixed(2) 
+          : 0
+      },
+      classes: classDetails,
+      unmarkedStudents,
+      studentsByClass
+    });
+
+  } catch (error) {
+    console.error('Error fetching unmarked students:', error);
+    res.status(500).json({ 
+      message: 'Error fetching unmarked students',
+      error: error.message 
+    });
+  }
+});
+
+// Mark attendance (create or update)
+router.post('/', requireAuth, requireRoles('super_admin', 'admin', 'hod', 'faculty', 'teacher', 'staff'), async (req, res) => {
+  try {
+    const { studentId, date, status, remarks, classId, sessionId, entryTime } = req.body;
+
+    // Validate required fields
+    if (!studentId || !date || !status) {
+      return res.status(400).json({ 
+        message: 'Missing required fields',
+        required: ['studentId', 'date', 'status']
+      });
+    }
 
     // Verify student exists
     const student = await Student.findById(studentId);
@@ -274,63 +399,206 @@ router.post('/', requireAuth, requireRoles('super_admin', 'admin', 'faculty', 't
       return res.status(404).json({ message: 'Student not found' });
     }
 
+    // If classId not provided, try to get it from student's class
+    let finalClassId = classId;
+    if (!finalClassId) {
+      const classByName = await Class.findOne({ name: student.class });
+      if (classByName) {
+        finalClassId = classByName._id;
+      }
+    }
+
+    // If classId still not available, return error
+    if (!finalClassId) {
+      return res.status(400).json({ 
+        message: 'classId is required or student must have a valid class assigned',
+        hint: 'Either provide classId in request body or ensure student has a class assigned'
+      });
+    }
+
+    // Normalize date to date-only format (YYYY-MM-DD)
+    const dateStr = new Date(date).toISOString().split('T')[0];
+
     // Check if attendance already exists for this student and date
-    let attendance = await Attendance.findOne({ studentId, date });
+    let attendance = await Attendance.findOne({ 
+      studentId, 
+      date: dateStr 
+    });
 
     if (attendance) {
       // Update existing attendance
       attendance.status = status;
-      attendance.remarks = remarks;
+      attendance.remarks = remarks || attendance.remarks;
+      attendance.verificationMethod = 'manual';
       attendance.markedAt = new Date();
+      attendance.markedBy = req.user._id;
+
+      if (!attendance.sessionId) {
+        attendance.sessionId = await getFallbackSessionId({
+          classId: finalClassId,
+          date: dateStr,
+          userId: req.user._id,
+        });
+      }
+      
       await attendance.save();
-      res.json(attendance);
+      return res.json({
+        status: 'success',
+        message: 'Attendance updated successfully',
+        data: attendance
+      });
     } else {
       // Create new attendance record
+      const resolvedSessionId = sessionId || await getFallbackSessionId({
+        classId: finalClassId,
+        date: dateStr,
+        userId: req.user._id,
+      });
+
       attendance = new Attendance({
         studentId,
-        date,
+        classId: finalClassId,
+        sessionId: resolvedSessionId,
+        date: dateStr,
         status,
-        remarks
+        remarks,
+        entryTime: entryTime ? new Date(entryTime) : new Date(),
+        exitTime: null,
+        verificationMethod: 'manual',
+        markedBy: req.user._id,
+        markedAt: new Date()
       });
+
       const newAttendance = await attendance.save();
-      res.status(201).json(newAttendance);
+      return res.status(201).json({
+        status: 'success',
+        message: 'Attendance marked successfully',
+        data: newAttendance
+      });
     }
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    console.error('Attendance marking error:', error);
+    res.status(400).json({ 
+      status: 'error',
+      message: 'Error marking attendance',
+      error: error.message 
+    });
   }
 });
 
 // Mark attendance for multiple students
-router.post('/bulk', requireAuth, requireRoles('super_admin', 'admin', 'faculty', 'teacher'), async (req, res) => {
+router.post('/bulk', requireAuth, requireRoles('super_admin', 'admin', 'hod', 'faculty', 'teacher', 'staff'), async (req, res) => {
   try {
-    const { records } = req.body; // Array of { studentId, date, status, remarks }
+    const { records, classId, sessionId } = req.body; // Array of { studentId, date, status, remarks, classId (optional) }
     
-    const results = await Promise.all(
-      records.map(async (record) => {
+    if (!records || !Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({ 
+        message: 'Invalid request format',
+        hint: 'Expected: { records: [{studentId, date, status, remarks}, ...], classId: "optional" }'
+      });
+    }
+
+    const results = [];
+    const errors = [];
+
+    for (const record of records) {
+      try {
         const { studentId, date, status, remarks } = record;
         
-        let attendance = await Attendance.findOne({ studentId, date });
+        if (!studentId || !date || !status) {
+          errors.push({ record, error: 'Missing required fields: studentId, date, status' });
+          continue;
+        }
+
+        // Get student to verify existence and get class if needed
+        const student = await Student.findById(studentId);
+        if (!student) {
+          errors.push({ record, error: `Student not found: ${studentId}` });
+          continue;
+        }
+
+        // Determine classId
+        let finalClassId = record.classId || classId;
+        if (!finalClassId && student.class) {
+          const classByName = await Class.findOne({ name: student.class });
+          if (classByName) {
+            finalClassId = classByName._id;
+          }
+        }
+
+        if (!finalClassId) {
+          errors.push({ record, error: 'classId required but not provided and student has no class assigned' });
+          continue;
+        }
+
+        // Normalize date to date-only format
+        const dateStr = new Date(date).toISOString().split('T')[0];
+
+        let attendance = await Attendance.findOne({ studentId, date: dateStr });
         
         if (attendance) {
+          // Update existing
           attendance.status = status;
-          attendance.remarks = remarks;
+          attendance.remarks = remarks || attendance.remarks;
+          attendance.verificationMethod = 'manual';
           attendance.markedAt = new Date();
-          return await attendance.save();
+          attendance.markedBy = req.user._id;
+          if (!attendance.sessionId) {
+            attendance.sessionId = await getFallbackSessionId({
+              classId: finalClassId,
+              date: dateStr,
+              userId: req.user._id,
+            });
+          }
+          const updated = await attendance.save();
+          results.push({ status: 'updated', data: updated });
         } else {
+          // Create new
           const newAttendance = new Attendance({
             studentId,
-            date,
+            classId: finalClassId,
+            sessionId: record.sessionId || sessionId || await getFallbackSessionId({
+              classId: finalClassId,
+              date: dateStr,
+              userId: req.user._id,
+            }),
+            date: dateStr,
             status,
-            remarks
+            remarks,
+            entryTime: new Date(),
+            verificationMethod: 'manual',
+            markedBy: req.user._id,
+            markedAt: new Date()
           });
-          return await newAttendance.save();
-        }
-      })
-    );
 
-    res.status(201).json(results);
+          const created = await newAttendance.save();
+          results.push({ status: 'created', data: created });
+        }
+      } catch (error) {
+        errors.push({ record, error: error.message });
+      }
+    }
+
+    res.status(201).json({
+      status: 'completed',
+      message: `Processed ${records.length} records: ${results.length} successful, ${errors.length} failed`,
+      summary: {
+        total: records.length,
+        successful: results.length,
+        failed: errors.length,
+        created: results.filter(r => r.status === 'created').length,
+        updated: results.filter(r => r.status === 'updated').length
+      },
+      results,
+      errors: errors.length > 0 ? errors : undefined
+    });
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    console.error('Bulk attendance marking error:', error);
+    res.status(400).json({ 
+      status: 'error',
+      message: 'Error marking attendance in bulk',
+      error: error.message 
+    });
   }
 });
 

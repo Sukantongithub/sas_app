@@ -1,7 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet,
-  FlatList,
   View,
   ActivityIndicator,
   RefreshControl,
@@ -21,17 +20,26 @@ import { useAuth } from '@/context/AuthContext';
 import { attendanceAPI, timetableAPI } from '@/services/api';
 import CommonHeader from '@/components/CommonHeader';
 
-// ─────────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────────
-interface Period {
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+interface BackendPeriod {
+  timetableId: string;  // entry._id embedded by backend
+  dayOfWeek: string;
   periodNumber: number;
   subject: string;
   startTime: string;
   endTime: string;
   room?: string;
   isLab?: boolean;
-  timetableId?: string; // entry _id from DB
+}
+
+interface EditPeriod {
+  periodNumber: number;
+  subject: string;
+  startTime: string;
+  endTime: string;
+  room: string;
+  isLab: boolean;
 }
 
 interface ClassItem {
@@ -44,281 +52,263 @@ interface ClassItem {
   students?: string[];
 }
 
+// ─── Constants ───────────────────────────────────────────────────────────────
+
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const DAYS_LOWER = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
-// ─────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────
-const getPeriodColor = (index: number) => {
-  const colors = [
-    'rgba(33, 150, 243, 0.12)',
-    'rgba(76, 175, 80, 0.12)',
-    'rgba(255, 193, 7, 0.12)',
-    'rgba(244, 67, 54, 0.12)',
-    'rgba(156, 39, 176, 0.12)',
-    'rgba(0, 188, 212, 0.12)',
-    'rgba(255, 152, 0, 0.12)',
-    'rgba(63, 81, 181, 0.12)',
-  ];
-  return colors[index % colors.length];
-};
-
-const accentColors = [
-  '#2196F3', '#4CAF50', '#FFC107', '#F44336',
-  '#9C27B0', '#00BCD4', '#FF9800', '#3F51B5',
+const PERIOD_COLORS = [
+  'rgba(33,150,243,0.12)', 'rgba(76,175,80,0.12)',
+  'rgba(255,193,7,0.12)',  'rgba(244,67,54,0.12)',
+  'rgba(156,39,176,0.12)', 'rgba(0,188,212,0.12)',
+  'rgba(255,152,0,0.12)',  'rgba(63,81,181,0.12)',
 ];
+const ACCENT = ['#2196F3','#4CAF50','#FFC107','#F44336','#9C27B0','#00BCD4','#FF9800','#3F51B5'];
 
-// ─────────────────────────────────────────────────────────────────
-// Empty period template
-// ─────────────────────────────────────────────────────────────────
-const emptyPeriod = (): Omit<Period, 'timetableId'> => ({
-  periodNumber: 1,
-  subject: '',
-  startTime: '09:00',
-  endTime: '09:50',
-  room: '',
-  isLab: false,
+const blankEdit = (): EditPeriod => ({
+  periodNumber: 1, subject: '', startTime: '09:00', endTime: '09:50', room: '', isLab: false,
 });
 
-// ─────────────────────────────────────────────────────────────────
-// Main Screen
-// ─────────────────────────────────────────────────────────────────
+// ─── Main Component ───────────────────────────────────────────────────────────
+
 export default function TimetableScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const colors = Colors[colorScheme ?? 'light'];
   const { user, token } = useAuth();
-
-  const isStaff = user?.role && ['staff', 'hod'].includes(user.role);
+  const isStaff = user?.role && ['staff', 'hod', 'admin', 'super_admin'].includes(user.role);
 
   // ── Student state ──
   const [studentTimetable, setStudentTimetable] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  const [studentLoading, setStudentLoading] = useState(false);
 
-  // ── Staff state ──
+  // ── Staff: class list ──
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [selectedClass, setSelectedClass] = useState<ClassItem | null>(null);
-  const [weeklyTimetable, setWeeklyTimetable] = useState<Record<string, Period[]>>({});
-  const [timetableEntries, setTimetableEntries] = useState<any[]>([]);
-  const [staffLoading, setStaffLoading] = useState(false);
   const [classPickerOpen, setClassPickerOpen] = useState(false);
 
-  // ── Modal state ──
-  const [modalVisible, setModalVisible] = useState(false);
-  const [editingDay, setEditingDay] = useState<string>('');
-  const [editingPeriods, setEditingPeriods] = useState<Omit<Period, 'timetableId'>[]>([emptyPeriod()]);
-  const [savingDay, setSavingDay] = useState(false);
+  // ── Staff: weekly timetable  (key = lowercase day, value = array of BackendPeriod) ──
+  // This is the SINGLE source of truth. timetableId comes from backend on each period.
+  const [weekly, setWeekly] = useState<Record<string, BackendPeriod[]>>({});
+  const [ttLoading, setTtLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // ─────────────────────────────────────────────────────────────────
-  // Student: fetch timetable
-  // ─────────────────────────────────────────────────────────────────
-  const fetchStudentTimetable = useCallback(async () => {
+  // ── Editor modal ──
+  const [editorDay, setEditorDay] = useState('');
+  const [editorPeriods, setEditorPeriods] = useState<EditPeriod[]>([blankEdit()]);
+  const [editorVisible, setEditorVisible] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // ── Add period quick modal ──
+  const [addModalDay, setAddModalDay] = useState('');
+  const [addForm, setAddForm] = useState<EditPeriod>(blankEdit());
+  const [addModalVisible, setAddModalVisible] = useState(false);
+  const [addingPeriod, setAddingPeriod] = useState(false);
+
+  // ── Per-period delete busy state ──
+  // Key: `${day}-${periodNumber}`
+  const [deletingKey, setDeletingKey] = useState<string | null>(null);
+
+  // ─── Fetch helpers ────────────────────────────────────────────────────────
+
+  const loadStudentTimetable = useCallback(async () => {
     if (!user?.id || !token) return;
-    setLoading(true);
+    setStudentLoading(true);
     try {
-      // Pass user ID - backend will handle both Student._id and User._id lookups
-      const data = await attendanceAPI.getStudentTimetable(user.id, token);
-      if (data && data.timetable) {
-        setStudentTimetable(data);
-      } else {
-        console.warn('No timetable data received:', data);
-      }
-    } catch (err: any) {
-      console.error('Error fetching student timetable:', err);
-      // If student not found, it might be that the student profile hasn't been created yet
-      if (err?.response?.status === 404) {
-        console.warn('Student profile not found. Make sure you are logged in as a student.');
-      }
+      const res = await attendanceAPI.getStudentTimetable(user.id, token);
+      if (res?.timetable) setStudentTimetable(res);
+    } catch (e) {
+      console.error('student timetable error', e);
     } finally {
-      setLoading(false);
+      setStudentLoading(false);
     }
   }, [user?.id, token]);
 
-  // ─────────────────────────────────────────────────────────────────
-  // Staff: fetch assigned classes
-  // ─────────────────────────────────────────────────────────────────
-  const fetchTeacherClasses = useCallback(async () => {
+  const loadClasses = useCallback(async () => {
     if (!token) return;
-    setStaffLoading(true);
+    setTtLoading(true);
     try {
-      const data = await timetableAPI.getTeacherClasses(token);
-      const list: ClassItem[] = Array.isArray(data?.data) ? data.data : [];
+      const res = await timetableAPI.getTeacherClasses(token);
+      const list: ClassItem[] = Array.isArray(res?.data) ? res.data : [];
       setClasses(list);
-      if (list.length > 0 && !selectedClass) {
-        setSelectedClass(list[0]);
-      }
-    } catch (err) {
-      console.error('Error fetching teacher classes:', err);
+      if (list.length > 0 && !selectedClass) setSelectedClass(list[0]);
+    } catch (e) {
+      console.error('loadClasses error', e);
     } finally {
-      setStaffLoading(false);
+      setTtLoading(false);
     }
   }, [token]);
 
-  // ─────────────────────────────────────────────────────────────────
-  // Staff: fetch timetable for selected class
-  // ─────────────────────────────────────────────────────────────────
-  const fetchClassTimetable = useCallback(async (cls: ClassItem) => {
+  /**
+   * loadTimetable:
+   *   GET /api/teachers/timetable/class/:classId
+   *   Response shape: { success: true, data: { timetable: { monday: [...], ... }, entries: [...] } }
+   *
+   *   Each period in `timetable.<day>` already has `timetableId` set to entry._id by the backend.
+   *   We store exactly that — no ObjectId conversion needed (JSON serialises ObjectId to string).
+   */
+  const loadTimetable = useCallback(async (cls: ClassItem) => {
     if (!token) return;
-    setStaffLoading(true);
+    setTtLoading(true);
     try {
-      const data = await timetableAPI.getClassTimetable(cls._id, token);
-      const tt = data?.data?.timetable || {};
-      const entries = data?.data?.entries || [];
-      setWeeklyTimetable(tt);
-      setTimetableEntries(entries);
-    } catch (err) {
-      console.error('Error fetching class timetable:', err);
+      const res = await timetableAPI.getClassTimetable(cls._id, token);
+      const tt: Record<string, BackendPeriod[]> = res?.data?.timetable || {};
+      // Guarantee all day keys exist
+      const full: Record<string, BackendPeriod[]> = {};
+      DAYS.forEach(d => { full[d.toLowerCase()] = tt[d.toLowerCase()] || []; });
+      setWeekly(full);
+    } catch (e) {
+      console.error('loadTimetable error', e);
+      Alert.alert('Error', 'Failed to load timetable. Pull down to refresh.');
     } finally {
-      setStaffLoading(false);
+      setTtLoading(false);
     }
   }, [token]);
 
-  // ─────────────────────────────────────────────────────────────────
-  // Effects
-  // ─────────────────────────────────────────────────────────────────
+  // ─── Effects ─────────────────────────────────────────────────────────────
+
   useEffect(() => {
-    if (isStaff) {
-      fetchTeacherClasses();
-    } else if (user) {
-      fetchStudentTimetable();
-    }
+    if (isStaff) loadClasses();
+    else if (user) loadStudentTimetable();
   }, [isStaff, user?.id]);
 
   useEffect(() => {
-    if (isStaff && selectedClass) {
-      fetchClassTimetable(selectedClass);
-    }
+    if (isStaff && selectedClass) loadTimetable(selectedClass);
   }, [selectedClass?._id]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    if (isStaff && selectedClass) {
-      await fetchClassTimetable(selectedClass);
-    } else {
-      await fetchStudentTimetable();
-    }
+    if (isStaff && selectedClass) await loadTimetable(selectedClass);
+    else await loadStudentTimetable();
     setRefreshing(false);
   };
 
-  // ─────────────────────────────────────────────────────────────────
-  // Staff: open add/edit modal for a day
-  // ─────────────────────────────────────────────────────────────────
-  const openDayEditor = (day: string) => {
-    const dayLower = day.toLowerCase();
-    const existing = weeklyTimetable[dayLower] || [];
-    setEditingDay(day);
-    if (existing.length > 0) {
-      setEditingPeriods(existing.map(p => ({
-        periodNumber: p.periodNumber,
-        subject: p.subject,
-        startTime: p.startTime,
-        endTime: p.endTime,
-        room: p.room || '',
-        isLab: p.isLab || false,
-      })));
-    } else {
-      setEditingPeriods([emptyPeriod()]);
-    }
-    setModalVisible(true);
-  };
+  // ─── Staff: day editor ───────────────────────────────────────────────────
 
-  const addPeriodToModal = () => {
-    setEditingPeriods(prev => [
-      ...prev,
-      { ...emptyPeriod(), periodNumber: prev.length + 1 },
-    ]);
-  };
-
-  const removePeriodFromModal = (idx: number) => {
-    setEditingPeriods(prev => prev.filter((_, i) => i !== idx).map((p, i) => ({ ...p, periodNumber: i + 1 })));
-  };
-
-  const updatePeriodField = (idx: number, field: keyof Omit<Period, 'timetableId'>, value: any) => {
-    setEditingPeriods(prev => prev.map((p, i) => i === idx ? { ...p, [field]: value } : p));
-  };
-
-  // ─────────────────────────────────────────────────────────────────
-  // Staff: save a day's timetable
-  // ─────────────────────────────────────────────────────────────────
-  const saveDayTimetable = async () => {
-    if (!selectedClass || !token) return;
-
-    for (const p of editingPeriods) {
-      if (!p.subject.trim()) {
-        Alert.alert('Validation', 'Subject name is required for all periods.');
-        return;
-      }
-      if (!p.startTime || !p.endTime) {
-        Alert.alert('Validation', 'Start and end times are required.');
-        return;
-      }
-    }
-
-    setSavingDay(true);
-    try {
-      const dayLower = editingDay.toLowerCase();
-      // Find existing entry for this day
-      const existingEntry = timetableEntries.find(e => e.dayOfWeek === dayLower);
-
-      if (existingEntry) {
-        await timetableAPI.updateTimetableEntry(existingEntry._id, {
-          periods: editingPeriods.map(p => ({
+  const openEditor = (day: string) => {
+    const existing = weekly[day.toLowerCase()] || [];
+    setEditorDay(day);
+    setEditorPeriods(
+      existing.length > 0
+        ? existing.map(p => ({
             periodNumber: p.periodNumber,
-            subject: p.subject.trim(),
+            subject: p.subject,
             startTime: p.startTime,
             endTime: p.endTime,
-            room: p.room?.trim() || undefined,
+            room: p.room || '',
             isLab: p.isLab || false,
-          })),
-        }, token);
+          }))
+        : [blankEdit()]
+    );
+    setEditorVisible(true);
+  };
+
+  const updateEditorField = (idx: number, field: keyof EditPeriod, val: any) =>
+    setEditorPeriods(prev => prev.map((p, i) => (i === idx ? { ...p, [field]: val } : p)));
+
+  const addEditorPeriod = () =>
+    setEditorPeriods(prev => [...prev, { ...blankEdit(), periodNumber: prev.length + 1 }]);
+
+  const removeEditorPeriod = (idx: number) => {
+    if (editorPeriods.length === 1) {
+      Alert.alert('Cannot Remove', 'At least one period is required. Use the 🗑 trash button to clear the whole day.');
+      return;
+    }
+    setEditorPeriods(prev =>
+      prev.filter((_, i) => i !== idx).map((p, i) => ({ ...p, periodNumber: i + 1 }))
+    );
+  };
+
+  const saveEditor = async () => {
+    for (const p of editorPeriods) {
+      if (!p.subject.trim()) { Alert.alert('Validation', 'Subject is required for all periods.'); return; }
+      if (!p.startTime || !p.endTime) { Alert.alert('Validation', 'Times are required.'); return; }
+    }
+    if (!selectedClass || !token) return;
+
+    setSaving(true);
+    try {
+      const dayLower = editorDay.toLowerCase();
+      const existing = weekly[dayLower] || [];
+      // timetableId is on every period from backend — use first period's id
+      const timetableId: string | undefined = existing[0]?.timetableId;
+
+      const payload = editorPeriods.map(p => ({
+        periodNumber: p.periodNumber,
+        subject: p.subject.trim(),
+        startTime: p.startTime,
+        endTime: p.endTime,
+        room: p.room.trim() || undefined,
+        isLab: p.isLab,
+      }));
+
+      if (timetableId) {
+        // Update existing entry — replace all periods
+        await timetableAPI.updateTimetableEntry(timetableId, { periods: payload }, token);
       } else {
+        // Create new entry for this day
         await timetableAPI.createTimetableEntry({
           classId: selectedClass._id,
           dayOfWeek: dayLower,
           section: selectedClass.section,
-          periods: editingPeriods.map(p => ({
-            periodNumber: p.periodNumber,
-            subject: p.subject.trim(),
-            startTime: p.startTime,
-            endTime: p.endTime,
-            room: p.room?.trim() || undefined,
-            isLab: p.isLab || false,
-          })),
+          periods: payload,
         }, token);
       }
 
-      setModalVisible(false);
-      await fetchClassTimetable(selectedClass);
-    } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to save timetable.');
+      setEditorVisible(false);
+      await loadTimetable(selectedClass);
+    } catch (e: any) {
+      Alert.alert('Save Failed', e?.message || 'Server error. Please try again.');
     } finally {
-      setSavingDay(false);
+      setSaving(false);
     }
   };
 
-  // ─────────────────────────────────────────────────────────────────
-  // Staff: clear a day's timetable
-  // ─────────────────────────────────────────────────────────────────
-  const clearDay = (day: string) => {
+  // ─── Staff: delete individual period (from card view) ────────────────────
+
+  const handleDeletePeriod = (day: string, period: BackendPeriod) => {
     const dayLower = day.toLowerCase();
-    const entry = timetableEntries.find(e => e.dayOfWeek === dayLower);
-    if (!entry) return;
+    const allPeriodsForDay = weekly[dayLower] || [];
+    const key = `${dayLower}-${period.periodNumber}`;
+
+    if (!period.timetableId) {
+      Alert.alert('Error', 'Timetable ID missing. Pull down to refresh and try again.');
+      return;
+    }
+
+    if (allPeriodsForDay.length === 1) {
+      // Last period — confirm full day clear instead
+      Alert.alert(
+        'Remove Last Period',
+        `"${period.subject}" is the only period on ${day}. Remove the entire day's schedule?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Remove Day',
+            style: 'destructive',
+            onPress: () => handleClearDay(day),
+          },
+        ]
+      );
+      return;
+    }
 
     Alert.alert(
-      'Clear Day',
-      `Remove all periods for ${day}?`,
+      'Delete Period',
+      `Delete Period ${period.periodNumber} — "${period.subject}" from ${day}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Clear', style: 'destructive',
+          text: 'Delete',
+          style: 'destructive',
           onPress: async () => {
+            setDeletingKey(key);
             try {
-              await timetableAPI.deleteTimetableEntry(entry._id, token!);
-              if (selectedClass) await fetchClassTimetable(selectedClass);
-            } catch (err: any) {
-              Alert.alert('Error', err?.message || 'Failed to delete.');
+              await timetableAPI.deletePeriod(period.timetableId!, period.periodNumber, token!);
+              if (selectedClass) await loadTimetable(selectedClass);
+            } catch (e: any) {
+              Alert.alert('Delete Failed', e?.message || 'Server error. Please try again.');
+            } finally {
+              setDeletingKey(null);
             }
           },
         },
@@ -326,362 +316,530 @@ export default function TimetableScreen() {
     );
   };
 
-  // ─────────────────────────────────────────────────────────────────
-  // RENDER: loading
-  // ─────────────────────────────────────────────────────────────────
-  if (loading || (isStaff && staffLoading && classes.length === 0)) {
+  // ─── Staff: clear entire day ──────────────────────────────────────────────
+
+  const handleClearDay = (day: string) => {
+    const dayLower = day.toLowerCase();
+    const existing = weekly[dayLower] || [];
+    const timetableId: string | undefined = existing[0]?.timetableId;
+    if (!timetableId) return;
+
+    Alert.alert(
+      'Clear Day',
+      `Remove all ${existing.length} period(s) scheduled on ${day}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear All',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await timetableAPI.deleteTimetableEntry(timetableId, token!);
+              if (selectedClass) await loadTimetable(selectedClass);
+            } catch (e: any) {
+              Alert.alert('Error', e?.message || 'Failed to clear day.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // ─── Staff: quick add period (from card "Add Period" button) ─────────────
+
+  const openAddModal = (day: string) => {
+    setAddModalDay(day);
+    setAddForm({ ...blankEdit() });
+    setAddModalVisible(true);
+  };
+
+  const confirmAddPeriod = async () => {
+    if (!addForm.subject.trim()) { Alert.alert('Validation', 'Subject is required.'); return; }
+    if (!addForm.startTime || !addForm.endTime) { Alert.alert('Validation', 'Times are required.'); return; }
+    if (!token || !selectedClass) return;
+
+    const dayLower = addModalDay.toLowerCase();
+    const existing = weekly[dayLower] || [];
+    const timetableId: string | undefined = existing[0]?.timetableId;
+
+    setAddingPeriod(true);
+    try {
+      if (timetableId) {
+        // Day already has an entry — add period directly via API
+        await timetableAPI.addPeriod(timetableId, {
+          periodNumber: existing.length + 1,
+          subject: addForm.subject.trim(),
+          startTime: addForm.startTime,
+          endTime: addForm.endTime,
+          room: addForm.room.trim() || undefined,
+          isLab: addForm.isLab,
+        }, token);
+      } else {
+        // Day has no entry — create one
+        await timetableAPI.createTimetableEntry({
+          classId: selectedClass._id,
+          dayOfWeek: dayLower,
+          section: selectedClass.section,
+          periods: [{
+            periodNumber: 1,
+            subject: addForm.subject.trim(),
+            startTime: addForm.startTime,
+            endTime: addForm.endTime,
+            room: addForm.room.trim() || undefined,
+            isLab: addForm.isLab,
+          }],
+        }, token);
+      }
+      setAddModalVisible(false);
+      await loadTimetable(selectedClass);
+    } catch (e: any) {
+      Alert.alert('Failed', e?.message || 'Could not add period.');
+    } finally {
+      setAddingPeriod(false);
+    }
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // RENDER HELPERS
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const inputStyle = [
+    styles.input,
+    {
+      color: isDark ? '#F1F5F9' : '#1E293B',
+      borderColor: isDark ? '#475569' : '#D1D5DB',
+      backgroundColor: isDark ? '#0F172A' : '#F9FAFB',
+    },
+  ];
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // RENDER: Loading screen
+  // ─────────────────────────────────────────────────────────────────────────
+
+  if ((isStaff && ttLoading && classes.length === 0) || (!isStaff && studentLoading && !studentTimetable)) {
     return (
       <ThemedView style={styles.container}>
         <CommonHeader title="Timetable" />
-        <View style={styles.loadingContainer}>
+        <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.tint} />
         </View>
       </ThemedView>
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
   // RENDER: STUDENT VIEW
-  // ─────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+
   if (!isStaff) {
     return (
       <ThemedView style={styles.container}>
         <CommonHeader title="Weekly Schedule" />
-
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.tint} />
-          </View>
-        ) : studentTimetable ? (
-          <FlatList
-            data={DAYS}
-            keyExtractor={day => day}
-            contentContainerStyle={styles.listContent}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-            renderItem={({ item: day }) => {
-              const dayClasses = studentTimetable.timetable?.[day] || [];
-              const hasClasses = dayClasses.length > 0;
+        <ScrollView
+          contentContainerStyle={styles.listContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        >
+          {studentTimetable ? (
+            DAYS.map(day => {
+              const dayClasses = studentTimetable.timetable?.[day.toLowerCase()] || studentTimetable.timetable?.[day] || [];
               return (
-                <ThemedView style={[styles.dayCard, { marginHorizontal: 16 }]}>
+                <ThemedView key={day} style={[styles.dayCard, { marginHorizontal: 16 }]}>
                   <ThemedText type="defaultSemiBold" style={styles.dayTitle}>{day}</ThemedText>
-                  {hasClasses ? (
-                    <View style={styles.classesContainer}>
-                      {dayClasses.map((classItem: any, index: number) => (
+                  {dayClasses.length > 0 ? (
+                    <View style={styles.periodsWrap}>
+                      {dayClasses.map((p: any, i: number) => (
                         <View
-                          key={index}
-                          style={[styles.classItem, {
-                            backgroundColor: getPeriodColor(index),
-                            borderLeftColor: accentColors[index % accentColors.length],
+                          key={i}
+                          style={[styles.periodCard, {
+                            backgroundColor: PERIOD_COLORS[i % PERIOD_COLORS.length],
+                            borderLeftColor: ACCENT[i % ACCENT.length],
                           }]}
                         >
-                          <View style={styles.periodInfo}>
-                            <ThemedText style={styles.period}>Period {classItem.periodNumber || classItem.period}</ThemedText>
-                            <ThemedText type="defaultSemiBold" style={styles.subject}>
-                              {classItem.subject || 'Subject'}
-                            </ThemedText>
-                            {classItem.startTime && classItem.endTime && (
-                              <ThemedText style={styles.code}>{classItem.startTime} - {classItem.endTime}</ThemedText>
-                            )}
-                            {classItem.room && (
-                              <ThemedText style={styles.code}>Room: {classItem.room}</ThemedText>
-                            )}
-                            {classItem.isLab && (
-                              <ThemedText style={[styles.code, { color: '#FF9800' }]}>🔬 Lab Class</ThemedText>
-                            )}
-                          </View>
+                          <ThemedText style={styles.periodLabel}>Period {p.periodNumber || p.period}</ThemedText>
+                          <ThemedText type="defaultSemiBold" style={styles.subjectText}>{p.subject}</ThemedText>
+                          {p.startTime && <ThemedText style={styles.metaText}>{p.startTime} – {p.endTime}</ThemedText>}
+                          {p.room && <ThemedText style={styles.metaText}>📍 {p.room}</ThemedText>}
+                          {p.isLab && <ThemedText style={[styles.metaText, { color: '#FF9800' }]}>🔬 Lab</ThemedText>}
                         </View>
                       ))}
                     </View>
                   ) : (
-                    <ThemedText style={styles.noClasses}>No classes scheduled</ThemedText>
+                    <ThemedText style={styles.noData}>No classes scheduled</ThemedText>
                   )}
                 </ThemedView>
               );
-            }}
-            ListFooterComponent={
-              studentTimetable.totalPeriods ? (
-                <ThemedView style={[styles.summaryCard, { marginHorizontal: 16 }]}>
-                  <IconSymbol name="info.circle.fill" size={18} color={colors.tint} />
-                  <View style={styles.summaryContent}>
-                    <ThemedText type="defaultSemiBold">Total Periods</ThemedText>
-                    <ThemedText style={styles.summaryValue}>{studentTimetable.totalPeriods} periods per week</ThemedText>
-                  </View>
-                </ThemedView>
-              ) : null
-            }
-          />
-        ) : (
-          <View style={styles.emptyState}>
-            <IconSymbol name="calendar" size={48} color={colors.text} />
-            <ThemedText style={styles.emptyText}>No timetable data available</ThemedText>
-            <TouchableOpacity
-              style={[styles.retryButton, { backgroundColor: colors.tint }]}
-              onPress={fetchStudentTimetable}
-            >
-              <ThemedText style={styles.retryButtonText}>Try Again</ThemedText>
-            </TouchableOpacity>
-          </View>
-        )}
+            })
+          ) : (
+            <View style={styles.center}>
+              <ThemedText style={styles.noData}>No timetable found</ThemedText>
+              <TouchableOpacity style={[styles.btn, { backgroundColor: colors.tint }]} onPress={loadStudentTimetable}>
+                <ThemedText style={styles.btnText}>Refresh</ThemedText>
+              </TouchableOpacity>
+            </View>
+          )}
+        </ScrollView>
       </ThemedView>
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
   // RENDER: STAFF VIEW
-  // ─────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+
   return (
     <ThemedView style={styles.container}>
       <CommonHeader title="Manage Timetable" />
 
-      {/* Class Picker */}
-      <View style={[styles.classPickerBar, { backgroundColor: isDark ? colors.cardBackground : '#F3F4F6' }]}>
-        <TouchableOpacity
-          style={[styles.classPickerBtn, { borderColor: colors.tint }]}
-          onPress={() => setClassPickerOpen(true)}
-        >
-          <IconSymbol name="rectangle.stack.fill" size={16} color={colors.tint} />
-          <ThemedText style={[styles.classPickerText, { color: colors.tint }]} numberOfLines={1}>
-            {selectedClass ? `${selectedClass.name} (${selectedClass.code})` : 'Select a Class'}
+      {/* ── Class Picker Bar ── */}
+      <View style={[styles.pickerBar, { backgroundColor: isDark ? '#1E293B' : '#F3F4F6' }]}>
+        <TouchableOpacity style={[styles.pickerBtn, { borderColor: colors.tint }]} onPress={() => setClassPickerOpen(true)}>
+          <IconSymbol name="rectangle.stack.fill" size={15} color={colors.tint} />
+          <ThemedText style={[styles.pickerBtnText, { color: colors.tint }]} numberOfLines={1}>
+            {selectedClass ? `${selectedClass.name} (${selectedClass.code})` : 'Select Class'}
           </ThemedText>
-          <IconSymbol name="chevron.down" size={14} color={colors.tint} />
+          <IconSymbol name="chevron.down" size={13} color={colors.tint} />
         </TouchableOpacity>
         {selectedClass && (
-          <ThemedText style={styles.classSubtext}>
+          <ThemedText style={styles.pickerSub}>
             {selectedClass.department} · Sem {selectedClass.semester}
             {selectedClass.section ? ` · Sec ${selectedClass.section}` : ''}
-            {selectedClass.students ? ` · ${selectedClass.students.length} students` : ''}
           </ThemedText>
         )}
       </View>
 
-      {staffLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.tint} />
+      {/* ── Main timetable list ── */}
+      {!selectedClass ? (
+        <View style={styles.center}>
+          <ThemedText style={styles.noData}>No class selected</ThemedText>
         </View>
-      ) : !selectedClass ? (
-        <View style={styles.emptyState}>
-          <IconSymbol name="rectangle.stack" size={48} color={colors.text} />
-          <ThemedText style={styles.emptyText}>No classes found</ThemedText>
-          <ThemedText style={styles.emptySubtext}>
-            Ask your admin to create classes in the Admin Panel first.
-          </ThemedText>
-          <TouchableOpacity
-            style={[styles.retryButton, { backgroundColor: colors.tint }]}
-            onPress={fetchTeacherClasses}
-          >
-            <ThemedText style={styles.retryButtonText}>Refresh</ThemedText>
-          </TouchableOpacity>
+      ) : ttLoading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={colors.tint} />
         </View>
       ) : (
         <ScrollView
           contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
-          {DAYS.map((day, dayIdx) => {
+          {DAYS.map(day => {
             const dayLower = day.toLowerCase();
-            const periods: Period[] = weeklyTimetable[dayLower] || [];
-            const hasPeriods = periods.length > 0;
+            const periods = weekly[dayLower] || [];
+            const has = periods.length > 0;
 
             return (
               <ThemedView key={day} style={[styles.dayCard, { marginHorizontal: 16 }]}>
-                {/* Day header */}
-                <View style={styles.dayHeader}>
-                  <ThemedText type="defaultSemiBold" style={styles.dayTitle}>{day}</ThemedText>
+                {/* Day header row */}
+                <View style={styles.dayHeaderRow}>
+                  <View style={styles.dayTitleRow}>
+                    <ThemedText type="defaultSemiBold" style={styles.dayTitle}>{day}</ThemedText>
+                    {has && (
+                      <View style={[styles.badge, { backgroundColor: colors.tint + '22' }]}>
+                        <ThemedText style={[styles.badgeText, { color: colors.tint }]}>
+                          {periods.length} {periods.length === 1 ? 'period' : 'periods'}
+                        </ThemedText>
+                      </View>
+                    )}
+                  </View>
                   <View style={styles.dayActions}>
-                    {hasPeriods && (
+                    {has && (
                       <TouchableOpacity
-                        style={[styles.iconBtn, { backgroundColor: 'rgba(244,67,54,0.1)' }]}
-                        onPress={() => clearDay(day)}
+                        style={[styles.actionBtn, { backgroundColor: 'rgba(244,67,54,0.1)' }]}
+                        onPress={() => handleClearDay(day)}
                       >
                         <IconSymbol name="trash" size={14} color="#F44336" />
                       </TouchableOpacity>
                     )}
                     <TouchableOpacity
-                      style={[styles.iconBtn, { backgroundColor: colors.tint + '18' }]}
-                      onPress={() => openDayEditor(day)}
+                      style={[styles.actionBtn, { backgroundColor: colors.tint + '18' }]}
+                      onPress={() => openEditor(day)}
                     >
-                      <IconSymbol name={hasPeriods ? 'pencil' : 'plus'} size={14} color={colors.tint} />
-                      <ThemedText style={[styles.iconBtnText, { color: colors.tint }]}>
-                        {hasPeriods ? 'Edit' : 'Add'}
+                      <IconSymbol name={has ? 'pencil' : 'plus'} size={14} color={colors.tint} />
+                      <ThemedText style={[styles.actionBtnText, { color: colors.tint }]}>
+                        {has ? 'Edit' : 'Add'}
                       </ThemedText>
                     </TouchableOpacity>
                   </View>
                 </View>
 
-                {/* Periods */}
-                {hasPeriods ? (
-                  <View style={styles.classesContainer}>
-                    {periods.map((p, idx) => (
-                      <View
-                        key={idx}
-                        style={[styles.classItem, {
-                          backgroundColor: getPeriodColor(idx),
-                          borderLeftColor: accentColors[idx % accentColors.length],
-                        }]}
-                      >
-                        <View style={styles.periodRow}>
-                          <View style={styles.periodInfo}>
-                            <ThemedText style={styles.period}>
-                              Period {p.periodNumber}{p.isLab ? ' · LAB' : ''}
-                            </ThemedText>
-                            <ThemedText type="defaultSemiBold" style={styles.subject}>{p.subject}</ThemedText>
-                            <ThemedText style={styles.code}>{p.startTime} – {p.endTime}{p.room ? ` · ${p.room}` : ''}</ThemedText>
+                {/* Period cards */}
+                {has ? (
+                  <View style={styles.periodsWrap}>
+                    {periods.map((p, idx) => {
+                      const key = `${dayLower}-${p.periodNumber}`;
+                      const isDeleting = deletingKey === key;
+                      return (
+                        <View
+                          key={idx}
+                          style={[styles.periodCard, {
+                            backgroundColor: PERIOD_COLORS[idx % PERIOD_COLORS.length],
+                            borderLeftColor: ACCENT[idx % ACCENT.length],
+                          }]}
+                        >
+                          <View style={styles.periodCardInner}>
+                            <View style={{ flex: 1 }}>
+                              <ThemedText style={styles.periodLabel}>
+                                Period {p.periodNumber}{p.isLab ? ' · LAB' : ''}
+                              </ThemedText>
+                              <ThemedText type="defaultSemiBold" style={styles.subjectText}>{p.subject}</ThemedText>
+                              <ThemedText style={styles.metaText}>
+                                {p.startTime} – {p.endTime}{p.room ? ` · ${p.room}` : ''}
+                              </ThemedText>
+                            </View>
+
+                            {/* ── DELETE PERIOD BUTTON ── */}
+                            <TouchableOpacity
+                              style={[styles.deletePeriodBtn, isDeleting && { opacity: 0.5 }]}
+                              disabled={isDeleting}
+                              onPress={() => handleDeletePeriod(day, p)}
+                            >
+                              {isDeleting
+                                ? <ActivityIndicator size="small" color="#F44336" />
+                                : <IconSymbol name="minus.circle.fill" size={22} color="#F44336" />}
+                            </TouchableOpacity>
                           </View>
                         </View>
-                      </View>
-                    ))}
+                      );
+                    })}
+
+                    {/* Quick Add Period button */}
+                    <TouchableOpacity
+                      style={[styles.quickAddBtn, { borderColor: colors.tint }]}
+                      onPress={() => openAddModal(day)}
+                    >
+                      <IconSymbol name="plus.circle" size={15} color={colors.tint} />
+                      <ThemedText style={[styles.quickAddText, { color: colors.tint }]}>Add Period</ThemedText>
+                    </TouchableOpacity>
                   </View>
                 ) : (
-                  <ThemedText style={styles.noClasses}>No periods — tap Add to create</ThemedText>
+                  <TouchableOpacity
+                    style={[styles.emptyDay, { borderColor: colors.tint + '55' }]}
+                    onPress={() => openEditor(day)}
+                  >
+                    <IconSymbol name="plus" size={16} color={colors.tint} />
+                    <ThemedText style={[styles.emptyDayText, { color: colors.tint }]}>Tap to add periods</ThemedText>
+                  </TouchableOpacity>
                 )}
               </ThemedView>
             );
           })}
 
-          {/* Info footer */}
-          <ThemedView style={[styles.summaryCard, { marginHorizontal: 16 }]}>
-            <IconSymbol name="info.circle.fill" size={18} color={colors.tint} />
-            <View style={styles.summaryContent}>
-              <ThemedText type="defaultSemiBold">Assigned to students</ThemedText>
-              <ThemedText style={styles.summaryValue}>
-                Students in this class will see the timetable you set here.
-              </ThemedText>
-            </View>
-          </ThemedView>
+          <View style={{ height: 28 }} />
         </ScrollView>
       )}
 
-      {/* ── Class Picker Modal ── */}
+      {/* ════════════════════════════════════════════════════════════════
+          CLASS PICKER MODAL
+      ════════════════════════════════════════════════════════════════ */}
       <Modal visible={classPickerOpen} transparent animationType="fade" onRequestClose={() => setClassPickerOpen(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setClassPickerOpen(false)}>
-          <View style={[styles.pickerSheet, { backgroundColor: isDark ? '#1E293B' : '#fff' }]}>
-            <ThemedText type="defaultSemiBold" style={styles.pickerTitle}>Select Class</ThemedText>
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setClassPickerOpen(false)}>
+          <View style={[styles.sheet, { backgroundColor: isDark ? '#1E293B' : '#fff' }]}>
+            <ThemedText type="defaultSemiBold" style={styles.sheetTitle}>Select Class</ThemedText>
             <ScrollView>
               {classes.map(cls => (
                 <TouchableOpacity
                   key={cls._id}
-                  style={[
-                    styles.pickerItem,
-                    selectedClass?._id === cls._id && { backgroundColor: colors.tint + '18' },
-                  ]}
+                  style={[styles.classRow, selectedClass?._id === cls._id && { backgroundColor: colors.tint + '18' }]}
                   onPress={() => { setSelectedClass(cls); setClassPickerOpen(false); }}
                 >
                   <ThemedText type="defaultSemiBold">{cls.name}</ThemedText>
-                  <ThemedText style={styles.pickerItemSub}>
-                    {cls.code} · {cls.department} · Sem {cls.semester}
-                    {cls.section ? ` · Sec ${cls.section}` : ''}
-                  </ThemedText>
+                  <ThemedText style={styles.classSub}>{cls.code} · {cls.department} · Sem {cls.semester}{cls.section ? ` · ${cls.section}` : ''}</ThemedText>
                 </TouchableOpacity>
               ))}
-              {classes.length === 0 && (
-                <ThemedText style={styles.noClasses}>No classes found</ThemedText>
-              )}
+              {classes.length === 0 && <ThemedText style={styles.noData}>No classes found</ThemedText>}
             </ScrollView>
           </View>
         </TouchableOpacity>
       </Modal>
 
-      {/* ── Day Period Editor Modal ── */}
-      <Modal visible={modalVisible} transparent animationType="slide" onRequestClose={() => setModalVisible(false)}>
-        <View style={styles.modalOverlay}>
+      {/* ════════════════════════════════════════════════════════════════
+          DAY EDITOR MODAL
+      ════════════════════════════════════════════════════════════════ */}
+      <Modal visible={editorVisible} transparent animationType="slide" onRequestClose={() => setEditorVisible(false)}>
+        <View style={styles.overlay}>
           <View style={[styles.editorSheet, { backgroundColor: isDark ? '#1E293B' : '#fff' }]}>
             {/* Header */}
             <View style={styles.editorHeader}>
-              <ThemedText type="defaultSemiBold" style={styles.editorTitle}>
-                {editingDay} · {selectedClass?.name}
-              </ThemedText>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <IconSymbol name="xmark.circle.fill" size={24} color={isDark ? '#94A3B8' : '#9CA3AF'} />
+              <View>
+                <ThemedText type="defaultSemiBold" style={styles.sheetTitle}>{editorDay}</ThemedText>
+                <ThemedText style={styles.classSub}>{selectedClass?.name}</ThemedText>
+              </View>
+              <TouchableOpacity onPress={() => setEditorVisible(false)}>
+                <IconSymbol name="xmark.circle.fill" size={26} color={isDark ? '#64748B' : '#9CA3AF'} />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.editorScroll} keyboardShouldPersistTaps="handled">
-              {editingPeriods.map((p, idx) => (
-                <View key={idx} style={[styles.periodEditor, { borderColor: isDark ? '#334155' : '#E5E7EB' }]}>
-                  {/* Period header */}
-                  <View style={styles.periodEditorHeader}>
-                    <ThemedText type="defaultSemiBold" style={{ color: colors.tint }}>Period {p.periodNumber}</ThemedText>
-                    {editingPeriods.length > 1 && (
-                      <TouchableOpacity onPress={() => removePeriodFromModal(idx)}>
-                        <IconSymbol name="minus.circle.fill" size={20} color="#F44336" />
-                      </TouchableOpacity>
-                    )}
+            <ScrollView style={{ paddingHorizontal: 16 }} keyboardShouldPersistTaps="handled">
+              {editorPeriods.map((p, idx) => (
+                <View key={idx} style={[styles.editorPeriodCard, { borderColor: isDark ? '#334155' : '#E5E7EB' }]}>
+                  {/* Period card header */}
+                  <View style={styles.editorPeriodHeader}>
+                    <View style={styles.editorPeriodTitle}>
+                      <View style={[styles.numBadge, { backgroundColor: ACCENT[idx % ACCENT.length] + '25' }]}>
+                        <ThemedText style={[styles.numBadgeText, { color: ACCENT[idx % ACCENT.length] }]}>{idx + 1}</ThemedText>
+                      </View>
+                      <ThemedText type="defaultSemiBold" style={{ color: colors.tint }}>Period {p.periodNumber}</ThemedText>
+                    </View>
+
+                    {/* ── REMOVE PERIOD from modal (local draft) ── */}
+                    <TouchableOpacity
+                      style={styles.removePeriodBtn}
+                      onPress={() => removeEditorPeriod(idx)}
+                    >
+                      <IconSymbol name="trash" size={14} color="#F44336" />
+                      <ThemedText style={styles.removePeriodText}>Remove</ThemedText>
+                    </TouchableOpacity>
                   </View>
 
-                  {/* Subject */}
                   <ThemedText style={styles.fieldLabel}>Subject *</ThemedText>
                   <TextInput
-                    style={[styles.input, { color: isDark ? '#F1F5F9' : '#1E293B', borderColor: isDark ? '#475569' : '#D1D5DB', backgroundColor: isDark ? '#0F172A' : '#F9FAFB' }]}
+                    style={inputStyle}
                     placeholder="e.g. Mathematics"
                     placeholderTextColor={isDark ? '#475569' : '#9CA3AF'}
                     value={p.subject}
-                    onChangeText={v => updatePeriodField(idx, 'subject', v)}
+                    onChangeText={v => updateEditorField(idx, 'subject', v)}
                   />
 
-                  {/* Time row */}
-                  <View style={styles.timeRow}>
-                    <View style={{ flex: 1, marginRight: 8 }}>
-                      <ThemedText style={styles.fieldLabel}>Start Time *</ThemedText>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <View style={{ flex: 1 }}>
+                      <ThemedText style={styles.fieldLabel}>Start *</ThemedText>
                       <TextInput
-                        style={[styles.input, { color: isDark ? '#F1F5F9' : '#1E293B', borderColor: isDark ? '#475569' : '#D1D5DB', backgroundColor: isDark ? '#0F172A' : '#F9FAFB' }]}
+                        style={inputStyle}
                         placeholder="09:00"
                         placeholderTextColor={isDark ? '#475569' : '#9CA3AF'}
                         value={p.startTime}
-                        onChangeText={v => updatePeriodField(idx, 'startTime', v)}
+                        onChangeText={v => updateEditorField(idx, 'startTime', v)}
                       />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <ThemedText style={styles.fieldLabel}>End Time *</ThemedText>
+                      <ThemedText style={styles.fieldLabel}>End *</ThemedText>
                       <TextInput
-                        style={[styles.input, { color: isDark ? '#F1F5F9' : '#1E293B', borderColor: isDark ? '#475569' : '#D1D5DB', backgroundColor: isDark ? '#0F172A' : '#F9FAFB' }]}
+                        style={inputStyle}
                         placeholder="09:50"
                         placeholderTextColor={isDark ? '#475569' : '#9CA3AF'}
                         value={p.endTime}
-                        onChangeText={v => updatePeriodField(idx, 'endTime', v)}
+                        onChangeText={v => updateEditorField(idx, 'endTime', v)}
                       />
                     </View>
                   </View>
 
-                  {/* Room */}
                   <ThemedText style={styles.fieldLabel}>Room (optional)</ThemedText>
                   <TextInput
-                    style={[styles.input, { color: isDark ? '#F1F5F9' : '#1E293B', borderColor: isDark ? '#475569' : '#D1D5DB', backgroundColor: isDark ? '#0F172A' : '#F9FAFB' }]}
-                    placeholder="e.g. Lab 3 / Room 204"
+                    style={inputStyle}
+                    placeholder="Room 204"
                     placeholderTextColor={isDark ? '#475569' : '#9CA3AF'}
                     value={p.room}
-                    onChangeText={v => updatePeriodField(idx, 'room', v)}
+                    onChangeText={v => updateEditorField(idx, 'room', v)}
                   />
 
-                  {/* Is Lab toggle */}
-                  <TouchableOpacity
-                    style={styles.labToggle}
-                    onPress={() => updatePeriodField(idx, 'isLab', !p.isLab)}
-                  >
+                  <TouchableOpacity style={styles.labRow} onPress={() => updateEditorField(idx, 'isLab', !p.isLab)}>
                     <View style={[styles.checkbox, { borderColor: colors.tint, backgroundColor: p.isLab ? colors.tint : 'transparent' }]}>
                       {p.isLab && <IconSymbol name="checkmark" size={11} color="#fff" />}
                     </View>
-                    <ThemedText style={styles.labLabel}>Lab session</ThemedText>
+                    <ThemedText style={{ fontSize: 13, opacity: 0.8 }}>Lab session</ThemedText>
                   </TouchableOpacity>
                 </View>
               ))}
 
               {/* Add another period */}
-              <TouchableOpacity style={[styles.addPeriodBtn, { borderColor: colors.tint }]} onPress={addPeriodToModal}>
+              <TouchableOpacity style={[styles.addAnotherBtn, { borderColor: colors.tint }]} onPress={addEditorPeriod}>
                 <IconSymbol name="plus.circle.fill" size={18} color={colors.tint} />
-                <ThemedText style={[styles.addPeriodText, { color: colors.tint }]}>Add Another Period</ThemedText>
+                <ThemedText style={[styles.addAnotherText, { color: colors.tint }]}>Add Another Period</ThemedText>
               </TouchableOpacity>
+
+              <View style={{ height: 12 }} />
             </ScrollView>
 
             {/* Save button */}
             <TouchableOpacity
-              style={[styles.saveBtn, { backgroundColor: colors.tint, opacity: savingDay ? 0.7 : 1 }]}
-              onPress={saveDayTimetable}
-              disabled={savingDay}
+              style={[styles.saveBtn, { backgroundColor: colors.tint, opacity: saving ? 0.7 : 1 }]}
+              onPress={saveEditor}
+              disabled={saving}
             >
-              {savingDay
+              {saving
                 ? <ActivityIndicator size="small" color="#fff" />
-                : <ThemedText style={styles.saveBtnText}>Save Timetable</ThemedText>
-              }
+                : <ThemedText style={styles.saveBtnText}>Save Timetable</ThemedText>}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ════════════════════════════════════════════════════════════════
+          QUICK ADD PERIOD MODAL
+      ════════════════════════════════════════════════════════════════ */}
+      <Modal visible={addModalVisible} transparent animationType="slide" onRequestClose={() => setAddModalVisible(false)}>
+        <View style={styles.overlay}>
+          <View style={[styles.addSheet, { backgroundColor: isDark ? '#1E293B' : '#fff' }]}>
+            <View style={styles.editorHeader}>
+              <View>
+                <ThemedText type="defaultSemiBold" style={styles.sheetTitle}>Add Period</ThemedText>
+                <ThemedText style={styles.classSub}>{addModalDay} · {selectedClass?.name}</ThemedText>
+              </View>
+              <TouchableOpacity onPress={() => setAddModalVisible(false)}>
+                <IconSymbol name="xmark.circle.fill" size={26} color={isDark ? '#64748B' : '#9CA3AF'} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ paddingHorizontal: 16 }} keyboardShouldPersistTaps="handled">
+              <ThemedText style={styles.fieldLabel}>Subject *</ThemedText>
+              <TextInput
+                style={inputStyle}
+                placeholder="e.g. Physics"
+                placeholderTextColor={isDark ? '#475569' : '#9CA3AF'}
+                value={addForm.subject}
+                onChangeText={v => setAddForm(f => ({ ...f, subject: v }))}
+                autoFocus
+              />
+
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <View style={{ flex: 1 }}>
+                  <ThemedText style={styles.fieldLabel}>Start *</ThemedText>
+                  <TextInput
+                    style={inputStyle}
+                    placeholder="09:00"
+                    placeholderTextColor={isDark ? '#475569' : '#9CA3AF'}
+                    value={addForm.startTime}
+                    onChangeText={v => setAddForm(f => ({ ...f, startTime: v }))}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <ThemedText style={styles.fieldLabel}>End *</ThemedText>
+                  <TextInput
+                    style={inputStyle}
+                    placeholder="09:50"
+                    placeholderTextColor={isDark ? '#475569' : '#9CA3AF'}
+                    value={addForm.endTime}
+                    onChangeText={v => setAddForm(f => ({ ...f, endTime: v }))}
+                  />
+                </View>
+              </View>
+
+              <ThemedText style={styles.fieldLabel}>Room (optional)</ThemedText>
+              <TextInput
+                style={inputStyle}
+                placeholder="Room 301"
+                placeholderTextColor={isDark ? '#475569' : '#9CA3AF'}
+                value={addForm.room}
+                onChangeText={v => setAddForm(f => ({ ...f, room: v }))}
+              />
+
+              <TouchableOpacity style={styles.labRow} onPress={() => setAddForm(f => ({ ...f, isLab: !f.isLab }))}>
+                <View style={[styles.checkbox, { borderColor: colors.tint, backgroundColor: addForm.isLab ? colors.tint : 'transparent' }]}>
+                  {addForm.isLab && <IconSymbol name="checkmark" size={11} color="#fff" />}
+                </View>
+                <ThemedText style={{ fontSize: 13, opacity: 0.8 }}>Lab session</ThemedText>
+              </TouchableOpacity>
+
+              <View style={{ height: 12 }} />
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.saveBtn, { backgroundColor: colors.tint, opacity: addingPeriod ? 0.7 : 1 }]}
+              onPress={confirmAddPeriod}
+              disabled={addingPeriod}
+            >
+              {addingPeriod
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <ThemedText style={styles.saveBtnText}>Add Period</ThemedText>}
             </TouchableOpacity>
           </View>
         </View>
@@ -690,92 +848,116 @@ export default function TimetableScreen() {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Styles
-// ─────────────────────────────────────────────────────────────────
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  listContent: { paddingTop: 8, paddingBottom: 28 },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingVertical: 40 },
+  listContent: { paddingTop: 8, paddingBottom: 24 },
 
   // Class picker bar
-  classPickerBar: { paddingHorizontal: 16, paddingVertical: 10, gap: 4 },
-  classPickerBtn: {
+  pickerBar: { paddingHorizontal: 16, paddingVertical: 10, gap: 4 },
+  pickerBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     borderWidth: 1.5, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
     alignSelf: 'flex-start',
   },
-  classPickerText: { fontSize: 14, fontWeight: '600', maxWidth: 220 },
-  classSubtext: { fontSize: 11, opacity: 0.6, marginTop: 2 },
+  pickerBtnText: { fontSize: 14, fontWeight: '600', maxWidth: 220 },
+  pickerSub: { fontSize: 11, opacity: 0.55, marginTop: 2 },
 
   // Day card
   dayCard: {
     marginBottom: 10, marginTop: 2, paddingVertical: 10, paddingHorizontal: 12,
-    borderRadius: 12, backgroundColor: 'rgba(128,128,128,0.08)',
+    borderRadius: 14, backgroundColor: 'rgba(128,128,128,0.07)',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 2, elevation: 2,
+    shadowOpacity: 0.06, shadowRadius: 3, elevation: 2,
   },
-  dayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  dayHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  dayTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
   dayTitle: { fontSize: 15, fontWeight: '600' },
-  dayActions: { flexDirection: 'row', gap: 8 },
-  iconBtn: {
+  badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 20 },
+  badgeText: { fontSize: 10, fontWeight: '700' },
+  dayActions: { flexDirection: 'row', gap: 6 },
+  actionBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
   },
-  iconBtnText: { fontSize: 12, fontWeight: '600' },
+  actionBtnText: { fontSize: 12, fontWeight: '600' },
 
-  // Period items
-  classesContainer: { gap: 8 },
-  classItem: {
-    paddingVertical: 10, paddingHorizontal: 10, borderRadius: 10, borderLeftWidth: 3,
-    borderLeftColor: '#007AFF',
+  // Period card
+  periodsWrap: { gap: 7 },
+  periodCard: {
+    borderRadius: 10, borderLeftWidth: 3, borderLeftColor: '#007AFF',
+    paddingVertical: 9, paddingHorizontal: 10,
   },
-  periodRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  periodInfo: { gap: 2, flex: 1 },
-  period: { fontSize: 10, opacity: 0.6, fontWeight: '600', textTransform: 'uppercase' },
-  subject: { fontSize: 14 },
-  code: { fontSize: 11, opacity: 0.7 },
-  noClasses: { fontSize: 12, opacity: 0.6, fontStyle: 'italic', textAlign: 'center', paddingVertical: 12 },
+  periodCardInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  periodLabel: { fontSize: 10, opacity: 0.6, fontWeight: '600', textTransform: 'uppercase' },
+  subjectText: { fontSize: 14, marginTop: 1 },
+  metaText: { fontSize: 11, opacity: 0.7, marginTop: 1 },
 
-  // Summary
-  summaryCard: {
-    flexDirection: 'row', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12,
-    marginBottom: 8, marginTop: 8, gap: 10, alignItems: 'center',
-    backgroundColor: 'rgba(128,128,128,0.08)',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 2, elevation: 2,
+  // Delete period button (on card)
+  deletePeriodBtn: {
+    padding: 8,
+    borderRadius: 20,
+    marginLeft: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  summaryContent: { flex: 1 },
-  summaryValue: { fontSize: 12, opacity: 0.7, marginTop: 2 },
 
-  // Empty
-  emptyState: { alignItems: 'center', justifyContent: 'center', flex: 1, gap: 12, paddingVertical: 40 },
-  emptyText: { opacity: 0.6, fontSize: 14 },
-  emptySubtext: { opacity: 0.5, fontSize: 12, textAlign: 'center', paddingHorizontal: 32 },
-  retryButton: { marginTop: 12, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
-  retryButtonText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  // Quick add period button
+  quickAddBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, paddingVertical: 8, borderWidth: 1, borderStyle: 'dashed',
+    borderRadius: 8, marginTop: 2,
+  },
+  quickAddText: { fontSize: 12, fontWeight: '600' },
 
-  // Class picker modal
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  pickerSheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32, maxHeight: '60%' },
-  pickerTitle: { fontSize: 16, marginBottom: 12 },
-  pickerItem: { paddingVertical: 12, paddingHorizontal: 8, borderRadius: 10, marginBottom: 4 },
-  pickerItemSub: { fontSize: 11, opacity: 0.6, marginTop: 2 },
+  // Empty day placeholder
+  emptyDay: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, paddingVertical: 14, borderWidth: 1.5, borderStyle: 'dashed',
+    borderRadius: 10, opacity: 0.7,
+  },
+  emptyDayText: { fontSize: 13, fontWeight: '600' },
+
+  noData: { fontSize: 13, opacity: 0.5, fontStyle: 'italic', textAlign: 'center', paddingVertical: 12 },
+  btn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
+  btnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+
+  // Modals
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.52)', justifyContent: 'flex-end' },
+  sheet: { borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 16, maxHeight: '60%' },
+  sheetTitle: { fontSize: 16, fontWeight: '700' },
+  classRow: { paddingVertical: 12, paddingHorizontal: 8, borderRadius: 10, marginBottom: 4 },
+  classSub: { fontSize: 11, opacity: 0.55, marginTop: 2 },
 
   // Editor modal
-  editorSheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '90%', paddingBottom: Platform.OS === 'ios' ? 32 : 16 },
-  editorHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(128,128,128,0.15)' },
-  editorTitle: { fontSize: 15 },
-  editorScroll: { paddingHorizontal: 16, paddingTop: 12 },
-  periodEditor: { borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 12 },
-  periodEditorHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  fieldLabel: { fontSize: 11, fontWeight: '600', opacity: 0.6, textTransform: 'uppercase', marginBottom: 4, marginTop: 8 },
-  input: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9, fontSize: 14 },
-  timeRow: { flexDirection: 'row' },
-  labToggle: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
+  editorSheet: { borderTopLeftRadius: 22, borderTopRightRadius: 22, maxHeight: '92%', paddingBottom: Platform.OS === 'ios' ? 32 : 16 },
+  editorHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(128,128,128,0.12)' },
+  editorPeriodCard: { borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 12, marginTop: 4 },
+  editorPeriodHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  editorPeriodTitle: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  numBadge: { width: 26, height: 26, borderRadius: 13, justifyContent: 'center', alignItems: 'center' },
+  numBadgeText: { fontSize: 12, fontWeight: '700' },
+  removePeriodBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8,
+    backgroundColor: 'rgba(244,67,54,0.08)',
+  },
+  removePeriodText: { fontSize: 11, color: '#F44336', fontWeight: '600' },
+  fieldLabel: { fontSize: 10, fontWeight: '700', opacity: 0.55, textTransform: 'uppercase', marginTop: 8, marginBottom: 4 },
+  input: { borderWidth: 1, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 9, fontSize: 14 },
+  labRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
   checkbox: { width: 18, height: 18, borderRadius: 4, borderWidth: 2, justifyContent: 'center', alignItems: 'center' },
-  labLabel: { fontSize: 13, opacity: 0.8 },
-  addPeriodBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1.5, borderStyle: 'dashed', borderRadius: 10, padding: 12, justifyContent: 'center', marginBottom: 16 },
-  addPeriodText: { fontSize: 14, fontWeight: '600' },
+  addAnotherBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, borderWidth: 1.5, borderStyle: 'dashed', borderRadius: 10,
+    padding: 12, marginBottom: 4,
+  },
+  addAnotherText: { fontSize: 14, fontWeight: '600' },
   saveBtn: { marginHorizontal: 16, marginTop: 8, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
   saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+
+  // Add period modal
+  addSheet: { borderTopLeftRadius: 22, borderTopRightRadius: 22, maxHeight: '80%', paddingBottom: Platform.OS === 'ios' ? 32 : 16 },
 });

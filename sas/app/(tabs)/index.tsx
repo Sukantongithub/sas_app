@@ -11,6 +11,7 @@ import CommonHeader from '@/components/CommonHeader';
 
 interface StudentProfile {
   id: string;
+  _id?: string;
   name: string;
   rollNumber: string;
   email: string;
@@ -31,7 +32,9 @@ interface StudentRequest {
   studentId: any;
   studentName?: string;
   leaveType?: string;
+  dutyType?: string;
   type?: string;
+  __type?: 'leave' | 'on_duty' | 'absence';
   reason: string;
   startDate: string;
   endDate?: string;
@@ -59,17 +62,29 @@ export default function StudentsScreen() {
 
   // Load data whenever the active tab changes OR when auth resolves (canManage/token ready)
   useEffect(() => {
-    if (!canManage || !token) return;
+    if (!token || !user) return;
+    if (!canManage) return;
+    
     if (activeTab === 'students') loadStudents();
-    else if (activeTab === 'requests') loadRequests();
-  }, [activeTab, canManage, token]);
+    else if (activeTab === 'requests') {
+      console.log('Loading requests for activeTab:', activeTab);
+      loadRequests();
+    }
+  }, [activeTab, user, token, canManage]);
 
   const loadStudents = async () => {
     if (!token || !canManage) return;
     setLoading(true);
     try {
       const response = await studentManagementAPI.listStudents({ limit: 100 }, token);
-      setStudents(response.students || []);
+      const studentsData = response?.data?.students || response?.students || response?.data || [];
+      const normalizedStudents = Array.isArray(studentsData)
+        ? studentsData.map((student: any) => ({
+            ...student,
+            id: student.id || student._id,
+          }))
+        : [];
+      setStudents(normalizedStudents);
     } catch (error) {
       console.error('Error loading students:', error);
     } finally {
@@ -78,11 +93,20 @@ export default function StudentsScreen() {
   };
 
   const loadRequests = async () => {
-    if (!token || !canManage) return;
+    if (!token || !canManage) {
+      console.warn('Cannot load requests: token=' + !!token + ', canManage=' + canManage);
+      return;
+    }
+    
     setLoading(true);
     try {
+      console.log('Calling getApprovalQueue...');
       const response = await studentManagementAPI.getApprovalQueue(undefined, undefined, token);
-      const all = [...(response.urgent || []), ...(response.normal || [])];
+      console.log('Approval Queue Response:', response);
+      
+      const all = [...(response.data?.urgent || []), ...(response.data?.normal || [])];
+      console.log('Processed requests:', all);
+      
       setRequests(all);
     } catch (error) {
       console.error('Error loading requests:', error);
@@ -112,7 +136,7 @@ export default function StudentsScreen() {
     }
     try {
       const requestId = selectedRequest._id || selectedRequest.id || '';
-      await studentManagementAPI.rejectRequest(requestId, approvalNotes, token);
+      await studentManagementAPI.rejectRequest(requestId, approvalNotes, token, selectedRequest.__type);
       Alert.alert('Success', 'Request rejected');
       setSelectedRequest(null);
       setApprovalNotes('');
@@ -165,7 +189,7 @@ export default function StudentsScreen() {
         canManage ? (
           <FlatList
             data={filteredStudents}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item) => item.id || item._id || item.rollNumber}
             contentContainerStyle={styles.listContent}
             refreshControl={
               <RefreshControl
@@ -291,7 +315,7 @@ export default function StudentsScreen() {
           <FlatList
             data={requests}
             keyExtractor={(item) => item._id || item.id || ''}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={styles.timelineContent}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
@@ -301,47 +325,54 @@ export default function StudentsScreen() {
                 }}
               />
             }
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                onPress={() => setSelectedRequest(item)}
-                style={styles.requestCard}
-                activeOpacity={0.7}>
-                {item.isUrgent && <View style={styles.urgentIndicator} />}
-                <View style={styles.requestHeader}>
-                  <View style={styles.requestAvatar}>
-                    <IconSymbol
-                      name={item.isUrgent ? "exclamationmark.triangle.fill" : "person.crop.circle.fill"}
-                      size={24}
-                      color={item.isUrgent ? '#ff6b6b' : Colors[colorScheme ?? 'light'].tint}
-                    />
-                  </View>
-                  <View style={styles.requestInfo}>
-                    <ThemedText type="defaultSemiBold" style={styles.requestName}>
+            renderItem={({ item, index }) => (
+              <View style={styles.timelineItem}>
+                <View style={styles.timelineLine} />
+                <View style={[
+                  styles.timelineMarker,
+                  {
+                    backgroundColor: item.isUrgent ? '#ff6b6b' : item.leaveType ? '#51cf66' : item.dutyType ? '#3b82f6' : '#64748b'
+                  }
+                ]} />
+                
+                <TouchableOpacity
+                  onPress={() => setSelectedRequest(item)}
+                  style={styles.timelineCard}
+                  activeOpacity={0.7}>
+                  <View style={styles.timelineHeader}>
+                    <ThemedText type="defaultSemiBold" style={styles.timelineStudentName}>
                       {item.studentName || 'Unknown Student'}
                     </ThemedText>
-                    <View style={styles.requestBadge}>
-                      <ThemedText style={styles.requestBadgeText}>{item.leaveType}</ThemedText>
-                    </View>
+                    {item.isUrgent && (
+                      <View style={styles.urgentBadgeSmall}>
+                        <ThemedText style={styles.urgentBadgeSmallText}>URGENT</ThemedText>
+                      </View>
+                    )}
                   </View>
-                  <IconSymbol name="chevron.right" size={20} color="#94a3b8" />
-                </View>
-                <ThemedText style={styles.requestReason} numberOfLines={2}>
-                  {item.reason}
-                </ThemedText>
-              </TouchableOpacity>
+                  
+                  <View style={styles.timelineBody}>
+                    <ThemedText style={styles.timelineType}>
+                      {item.requestType || item.leaveType || item.dutyType || 'Request'}
+                    </ThemedText>
+                    <ThemedText style={styles.timelineReason} numberOfLines={2}>
+                      {item.reason}
+                    </ThemedText>
+                  </View>
+                </TouchableOpacity>
+              </View>
             )}
             ListEmptyComponent={
               loading ? (
-                <View style={styles.loadingState}>
+                <View style={styles.requestsLoadingState}>
                   <ActivityIndicator size="large" color={Colors[colorScheme ?? 'light'].tint} />
                 </View>
               ) : (
-                <View style={styles.emptyState}>
-                  <View style={styles.emptyIcon}>
-                    <IconSymbol name="tray.fill" size={64} color="#cbd5e1" />
+                <View style={styles.requestsEmptyState}>
+                  <View style={styles.emptyIconLarge}>
+                    <ThemedText style={styles.emptyIconText}>✨</ThemedText>
                   </View>
-                  <ThemedText style={styles.emptyText}>All clear!</ThemedText>
-                  <ThemedText style={styles.emptyHint}>No pending requests</ThemedText>
+                  <ThemedText style={styles.emptyTextLarge}>All clear!</ThemedText>
+                  <ThemedText style={styles.emptyHintLarge}>No pending requests</ThemedText>
                 </View>
               )
             }
@@ -604,7 +635,23 @@ export default function StudentsScreen() {
                       </View>
                       <View style={styles.infoContent}>
                         <ThemedText style={styles.infoLabel}>Request Type</ThemedText>
-                        <ThemedText style={styles.infoValue}>{selectedRequest.leaveType}</ThemedText>
+                        <ThemedText style={styles.infoValue}>
+                          {selectedRequest.requestType || selectedRequest.leaveType || selectedRequest.dutyType || 'Request'}
+                        </ThemedText>
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={styles.infoCard}>
+                    <View style={styles.infoRow}>
+                      <View style={styles.infoIconContainer}>
+                        <IconSymbol name="calendar" size={20} color={Colors[colorScheme ?? 'light'].tint} />
+                      </View>
+                      <View style={styles.infoContent}>
+                        <ThemedText style={styles.infoLabel}>Dates</ThemedText>
+                        <ThemedText style={styles.infoValue}>
+                          {selectedRequest.dates || `${selectedRequest.startDate} - ${selectedRequest.endDate || ''}`}
+                        </ThemedText>
                       </View>
                     </View>
                   </View>
@@ -760,6 +807,26 @@ const styles = StyleSheet.create({
   requestBadgeText: { fontSize: 11, fontWeight: '600', color: '#3b82f6' },
   requestReason: { fontSize: 14, opacity: 0.7, lineHeight: 20 },
 
+  // New Request Tab Layout
+  timelineContent: { paddingHorizontal: 16, paddingVertical: 16, paddingBottom: 40 },
+  timelineItem: { flexDirection: 'row', marginBottom: 24, position: 'relative' },
+  timelineLine: { position: 'absolute', left: 11, top: 40, width: 2, bottom: -24, backgroundColor: 'rgba(148, 163, 184, 0.2)' },
+  timelineMarker: { width: 24, height: 24, borderRadius: 12, marginRight: 16, marginTop: 0, borderWidth: 3, borderColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 3, elevation: 4 },
+  timelineCard: { flex: 1, backgroundColor: 'rgba(128, 128, 128, 0.04)', borderRadius: 14, padding: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 2 },
+  timelineHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  timelineStudentName: { fontSize: 15, flex: 1 },
+  urgentBadgeSmall: { backgroundColor: '#ff6b6b', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  urgentBadgeSmallText: { fontSize: 10, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
+  timelineBody: { paddingTop: 4 },
+  timelineType: { fontSize: 12, opacity: 0.6, marginBottom: 6, fontWeight: '500' },
+  timelineReason: { fontSize: 13, opacity: 0.65, lineHeight: 18 },
+  requestsLoadingState: { paddingVertical: 100, alignItems: 'center' },
+  requestsEmptyState: { paddingVertical: 120, alignItems: 'center', justifyContent: 'center' },
+  emptyIconLarge: { width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(129, 140, 248, 0.1)', justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
+  emptyIconText: { fontSize: 40 },
+  emptyTextLarge: { fontSize: 20, fontWeight: '700', marginBottom: 8 },
+  emptyHintLarge: { fontSize: 15, opacity: 0.5, textAlign: 'center', paddingHorizontal: 40 },
+
   // Empty State
   loadingState: { paddingVertical: 80, alignItems: 'center' },
   emptyState: { paddingVertical: 80, alignItems: 'center' },
@@ -787,7 +854,7 @@ const styles = StyleSheet.create({
   infoIconContainer: { width: 40, height: 40, borderRadius: 12, backgroundColor: Colors.light.tint + '16', justifyContent: 'center', alignItems: 'center', marginRight: 14 },
   infoContent: { flex: 1, paddingTop: 2 },
   infoLabel: { fontSize: 12, opacity: 0.6, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 },
-  infoValue: { fontSize: 15, fontWeight: '500', lineHeight: 22 },
+  infoValue: { fontSize: 15, fontWeight: '500', lineHeight: 22, flexWrap: 'wrap' },
 
   // Section
   sectionTitle: { fontSize: 18, marginTop: 24, marginBottom: 16 },
@@ -803,11 +870,11 @@ const styles = StyleSheet.create({
   textarea: { fontSize: 15, minHeight: 100, textAlignVertical: 'top' },
 
   // Action Buttons
-  actionButtons: { flexDirection: 'row', gap: 12 },
-  rejectButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ff6b6b', paddingVertical: 16, borderRadius: 14, gap: 8, shadowColor: '#ff6b6b', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-  rejectText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  approveButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#51cf66', paddingVertical: 16, borderRadius: 14, gap: 8, shadowColor: '#51cf66', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-  approveText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  actionButtons: { flexDirection: 'row', gap: 12, paddingHorizontal: 4 },
+  rejectButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ff6b6b', paddingVertical: 14, paddingHorizontal: 16, borderRadius: 14, gap: 8, shadowColor: '#ff6b6b', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 5 },
+  rejectText: { color: '#ffffff', fontSize: 15, fontWeight: '600', letterSpacing: 0.3 },
+  approveButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#51cf66', paddingVertical: 14, paddingHorizontal: 16, borderRadius: 14, gap: 8, shadowColor: '#51cf66', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 5 },
+  approveText: { color: '#ffffff', fontSize: 15, fontWeight: '600', letterSpacing: 0.3 },
 
   // Analytics
   statsGrid: { gap: 12, marginBottom: 24 },

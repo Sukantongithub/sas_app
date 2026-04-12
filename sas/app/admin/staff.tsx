@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   FlatList,
   Modal,
+  Platform,
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,8 +20,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/context/AuthContext';
 import AdminHeader from './AdminHeader';
-
-const API_BASE_URL = 'http://localhost:5000/api';
+import { API_BASE_URL } from '@/config/apiConfig';
 
 interface StaffMember {
   _id: string;
@@ -80,6 +80,7 @@ export default function StaffManagementScreen() {
   const [showDesignationModal, setShowDesignationModal] = useState(false);
   const [showClassModal, setShowClassModal] = useState(false);
   const [importMessage, setImportMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const blankForm = () => ({
     name: '',
@@ -132,6 +133,23 @@ export default function StaffManagementScreen() {
     fetchClasses();
   }, [fetchStaff, fetchClasses]);
 
+  // ── Open Edit Form ────────────────────────────────────────────
+  const openEdit = (staffMember: StaffMember) => {
+    setEditingId(staffMember._id);
+    setFormData({
+      name: staffMember.userId?.name || '',
+      email: staffMember.userId?.email || '',
+      password: '',
+      employeeId: staffMember.employeeId || '',
+      designation: staffMember.designation || 'staff',
+      department: staffMember.department || DEPARTMENTS[0],
+      phone: '',
+      dateOfJoining: new Date().toISOString().split('T')[0],
+      classIds: [],
+    });
+    setShowForm(true);
+  };
+
   // ── Create Staff ───────────────────────────────────────────────
   const handleCreateStaff = async () => {
     if (!formData.name || !formData.email || !formData.password || !formData.employeeId || !formData.department || !formData.designation) {
@@ -148,6 +166,7 @@ export default function StaffManagementScreen() {
       if (!response.ok) throw new Error(result.message || result.errors?.[0]?.msg || 'Failed to create staff');
       Alert.alert('Success', 'Staff member created successfully');
       setFormData(blankForm());
+      setEditingId(null);
       setShowForm(false);
       await fetchStaff();
     } catch (error: any) {
@@ -155,25 +174,79 @@ export default function StaffManagementScreen() {
     }
   };
 
+  // ── Update Staff ───────────────────────────────────────────────
+  const handleUpdateStaff = async () => {
+    if (!editingId) return;
+    if (!formData.name || !formData.email || !formData.employeeId || !formData.department || !formData.designation) {
+      Alert.alert('Error', 'Please fill in all required fields');
+      return;
+    }
+    try {
+      const updateData = { ...formData };
+      if (!updateData.password) {
+        delete (updateData as any).password;
+      }
+      const response = await fetch(`${API_BASE_URL}/admin/staff/${editingId}`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateData),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || result.errors?.[0]?.msg || 'Failed to update staff');
+      Alert.alert('Success', 'Staff member updated successfully');
+      setFormData(blankForm());
+      setEditingId(null);
+      setShowForm(false);
+      await fetchStaff();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update staff');
+    }
+  };
+
   // ── Delete Staff ───────────────────────────────────────────────
+  const performDeleteStaff = async (id: string) => {
+    try {
+      let response = await fetch(`${API_BASE_URL}/admin/staff/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      // Fallback for environments where DELETE is blocked/unsupported
+      if (!response.ok) {
+        response = await fetch(`${API_BASE_URL}/admin/staff/${id}/delete`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
+
+      const result = await response.json().catch(() => ({} as any));
+      if (!response.ok) throw new Error(result.message || 'Failed to delete staff');
+      Alert.alert('Success', 'Staff member deleted');
+      setStaff(prev => prev.filter(s => s._id !== id));
+      await fetchStaff();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to delete staff');
+    }
+  };
+
   const handleDeleteStaff = (id: string, name: string) => {
+    if (Platform.OS === 'web') {
+      const confirmed = typeof window !== 'undefined'
+        ? window.confirm(`Are you sure you want to delete ${name}?`)
+        : true;
+      if (confirmed) {
+        void performDeleteStaff(id);
+      }
+      return;
+    }
+
     Alert.alert('Delete Staff', `Are you sure you want to delete ${name}?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
         style: 'destructive',
-        onPress: async () => {
-          try {
-            const response = await fetch(`${API_BASE_URL}/admin/staff/${id}`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bearer ${token}` },
-            });
-            if (!response.ok) throw new Error('Failed to delete staff');
-            Alert.alert('Success', 'Staff member deleted');
-            await fetchStaff();
-          } catch (error: any) {
-            Alert.alert('Error', error.message || 'Failed to delete staff');
-          }
+        onPress: () => {
+          void performDeleteStaff(id);
         },
       },
     ]);
@@ -293,8 +366,8 @@ export default function StaffManagementScreen() {
         {showForm && (
           <View style={[styles.formContainer, { backgroundColor: colors.cardBackground, borderColor: colors.tint }]}>
             <View style={styles.formHeader}>
-              <IconSymbol name="person.2.badge.gearshape.fill" size={28} color={colors.tint} />
-              <ThemedText type="defaultSemiBold" style={styles.formTitle}>Create New Staff</ThemedText>
+              <IconSymbol name={editingId ? "pencil.circle.fill" : "person.2.badge.gearshape.fill"} size={28} color={colors.tint} />
+              <ThemedText type="defaultSemiBold" style={styles.formTitle}>{editingId ? 'Edit Staff Member' : 'Create New Staff'}</ThemedText>
             </View>
 
             {/* Name */}
@@ -332,7 +405,7 @@ export default function StaffManagementScreen() {
 
             {/* Password */}
             <View style={styles.inputGroup}>
-              <ThemedText style={styles.inputLabel}>Password *</ThemedText>
+              <ThemedText style={styles.inputLabel}>Password {editingId ? '(Leave blank to keep current)' : '*'}</ThemedText>
               <View style={[styles.inputWrapper, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}>
                 <IconSymbol name="lock.fill" size={18} color={colors.textSecondary} />
                 <TextInput
@@ -427,16 +500,17 @@ export default function StaffManagementScreen() {
             <View style={styles.buttonRow}>
               <TouchableOpacity
                 style={[styles.button, styles.cancelButton, { backgroundColor: colors.border }]}
-                onPress={() => { setFormData(blankForm()); setShowForm(false); }}>
+                onPress={() => { setFormData(blankForm()); setShowForm(false); setEditingId(null); }}>
+                <IconSymbol name="xmark.circle.fill" size={18} color={colors.textSecondary} />
                 <ThemedText style={[styles.buttonText, { color: colors.text }]}>Cancel</ThemedText>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.button} onPress={handleCreateStaff}>
+              <TouchableOpacity style={styles.button} onPress={editingId ? handleUpdateStaff : handleCreateStaff}>
                 <LinearGradient
                   colors={[colors.gradientStart, colors.gradientEnd]}
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                   style={styles.gradientButton}>
                   <IconSymbol name="checkmark.circle.fill" size={18} color="#fff" />
-                  <ThemedText style={[styles.buttonText, { color: '#fff' }]}>Create Staff</ThemedText>
+                  <ThemedText style={[styles.buttonText, { color: '#fff' }]}>{editingId ? 'Update Staff' : 'Create Staff'}</ThemedText>
                 </LinearGradient>
               </TouchableOpacity>
             </View>
@@ -449,7 +523,7 @@ export default function StaffManagementScreen() {
             {/* Full-width gradient Add button */}
             <TouchableOpacity
               style={styles.addButtonWrapper}
-              onPress={() => { setFormData(blankForm()); setShowForm(true); }}>
+              onPress={() => { setFormData(blankForm()); setEditingId(null); setShowForm(true); }}>
               <LinearGradient
                 colors={[colors.gradientStart, colors.gradientEnd]}
                 start={{ x: 0, y: 0 }}
@@ -542,6 +616,11 @@ export default function StaffManagementScreen() {
                   </View>
                 )}
               </View>
+              <TouchableOpacity
+                style={[styles.editButton, { backgroundColor: colors.tint }]}
+                onPress={() => openEdit(item)}>
+                <IconSymbol name="pencil.fill" size={16} color="#fff" />
+              </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.deleteButton, { backgroundColor: colors.error }]}
                 onPress={() => handleDeleteStaff(item._id, item.userId?.name)}>
@@ -839,6 +918,7 @@ const styles = StyleSheet.create({
   staffName: { fontSize: 16, marginBottom: 6 },
   detailRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 },
   staffDetail: { fontSize: 13, opacity: 0.7 },
+  editButton: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginRight: 8 },
   deleteButton: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginLeft: 8 },
 
   // Empty
