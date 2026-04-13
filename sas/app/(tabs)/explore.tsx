@@ -20,6 +20,10 @@ export default function MarkAttendanceScreen() {
   const [manualStudentClass, setManualStudentClass] = useState('');
   const [manualStatus, setManualStatus] = useState<'present' | 'absent' | 'late'>('present');
   const [manualRecords, setManualRecords] = useState<Array<{id: string, name: string, rollNumber: string, class: string, status: 'present' | 'absent' | 'late'}>>([]);
+  const [selectedClass, setSelectedClass] = useState<string | null>(null);
+
+  const normalizeId = (value: any) => String(value || '').trim();
+  const normalizeClass = (value: any) => String(value || '').trim().toLowerCase();
   
   const todayAttendance = getTodayAttendance();
   const markedStudentIds = new Set(todayAttendance.map(record => record.studentId));
@@ -76,10 +80,16 @@ export default function MarkAttendanceScreen() {
   };
 
   const handleMarkAttendance = async (studentId: string, status: 'present' | 'absent' | 'late') => {
+    const normalizedStudentId = normalizeId(studentId);
+    if (!normalizedStudentId) {
+      Alert.alert('Error', 'Invalid student ID. Please refresh and try again.');
+      return;
+    }
+
     try {
       setMarking(true);
-      setSelectedStatus(prev => ({ ...prev, [studentId]: status }));
-      await markAttendance(studentId, status);
+      setSelectedStatus(prev => ({ ...prev, [normalizedStudentId]: status }));
+      await markAttendance(normalizedStudentId, status);
     } catch (err) {
       Alert.alert('Error', 'Failed to mark attendance');
     } finally {
@@ -103,10 +113,13 @@ export default function MarkAttendanceScreen() {
           onPress: async () => {
             try {
               setMarking(true);
-              for (const student of students) {
-                await handleMarkAttendance(student.id, 'present');
+              for (const student of apiStudentsForClass) {
+                const studentId = normalizeId((student as any).id || (student as any)._id);
+                if (studentId) {
+                  await handleMarkAttendance(studentId, 'present');
+                }
               }
-              Alert.alert('Success', 'All students marked as present');
+              Alert.alert('Success', 'All students in selected class marked as present');
             } catch (err) {
               Alert.alert('Error', 'Failed to mark all students');
             } finally {
@@ -131,42 +144,57 @@ export default function MarkAttendanceScreen() {
     }
   };
 
+  const availableClasses = [...new Set(
+    students
+      .map((student: any) => String(student?.class || '').trim())
+      .filter(Boolean)
+  )].sort((a, b) => a.localeCompare(b));
+
+  const apiStudentsForClass = selectedClass
+    ? students.filter((student: any) => normalizeClass(student?.class) === normalizeClass(selectedClass))
+    : [];
+
+  const manualRecordsForClass = selectedClass
+    ? manualRecords.filter((record) => normalizeClass(record.class) === normalizeClass(selectedClass))
+    : [];
+
   const stats = {
-    total: students.length + manualRecords.length,
-    present: todayAttendance.filter(r => r.status === 'present').length + manualRecords.filter(r => r.status === 'present').length,
-    absent: todayAttendance.filter(r => r.status === 'absent').length + manualRecords.filter(r => r.status === 'absent').length,
-    late: todayAttendance.filter(r => r.status === 'late').length + manualRecords.filter(r => r.status === 'late').length,
+    total: apiStudentsForClass.length + manualRecordsForClass.length,
+    present: todayAttendance.filter(r => r.status === 'present' && apiStudentsForClass.some(s => normalizeId((s as any).id || (s as any)._id) === normalizeId(r.studentId))).length + manualRecordsForClass.filter(r => r.status === 'present').length,
+    absent: todayAttendance.filter(r => r.status === 'absent' && apiStudentsForClass.some(s => normalizeId((s as any).id || (s as any)._id) === normalizeId(r.studentId))).length + manualRecordsForClass.filter(r => r.status === 'absent').length,
+    late: todayAttendance.filter(r => r.status === 'late' && apiStudentsForClass.some(s => normalizeId((s as any).id || (s as any)._id) === normalizeId(r.studentId))).length + manualRecordsForClass.filter(r => r.status === 'late').length,
   };
 
   // Combine students from API and manual entries
   const displayStudents = [
-    ...students,
-    ...manualRecords.map(r => ({...r, _id: r.id}))
+    ...apiStudentsForClass,
+    ...manualRecordsForClass.map(r => ({...r, _id: r.id}))
   ];
 
   return (
     <ThemedView style={styles.container}>
       <CommonHeader title="Mark Attendance" />
 
-      {/* Stats Row */}
-      <View style={styles.statsRow}>
-        <View style={styles.statBadge}>
-          <ThemedText style={styles.statNumber}>{stats.total}</ThemedText>
-          <ThemedText style={styles.statLabel}>Total</ThemedText>
+      {selectedClass && (
+        <View style={styles.statsRow}>
+          <View style={styles.statBadge}>
+            <ThemedText style={styles.statNumber}>{stats.total}</ThemedText>
+            <ThemedText style={styles.statLabel}>Total</ThemedText>
+          </View>
+          <View style={[styles.statBadge, { backgroundColor: 'rgba(76, 175, 80, 0.15)' }]}> 
+            <ThemedText style={[styles.statNumber, { color: '#4CAF50' }]}>{stats.present}</ThemedText>
+            <ThemedText style={styles.statLabel}>Present</ThemedText>
+          </View>
+          <View style={[styles.statBadge, { backgroundColor: 'rgba(244, 67, 54, 0.15)' }]}> 
+            <ThemedText style={[styles.statNumber, { color: '#F44336' }]}>{stats.absent}</ThemedText>
+            <ThemedText style={styles.statLabel}>Absent</ThemedText>
+          </View>
+          <View style={[styles.statBadge, { backgroundColor: 'rgba(255, 152, 0, 0.15)' }]}> 
+            <ThemedText style={[styles.statNumber, { color: '#FF9800' }]}>{stats.late}</ThemedText>
+            <ThemedText style={styles.statLabel}>Late</ThemedText>
+          </View>
         </View>
-        <View style={[styles.statBadge, { backgroundColor: 'rgba(76, 175, 80, 0.15)' }]}>
-          <ThemedText style={[styles.statNumber, { color: '#4CAF50' }]}>{stats.present}</ThemedText>
-          <ThemedText style={styles.statLabel}>Present</ThemedText>
-        </View>
-        <View style={[styles.statBadge, { backgroundColor: 'rgba(244, 67, 54, 0.15)' }]}>
-          <ThemedText style={[styles.statNumber, { color: '#F44336' }]}>{stats.absent}</ThemedText>
-          <ThemedText style={styles.statLabel}>Absent</ThemedText>
-        </View>
-        <View style={[styles.statBadge, { backgroundColor: 'rgba(255, 152, 0, 0.15)' }]}>
-          <ThemedText style={[styles.statNumber, { color: '#FF9800' }]}>{stats.late}</ThemedText>
-          <ThemedText style={styles.statLabel}>Late</ThemedText>
-        </View>
-      </View>
+      )}
 
       {error && (
         <ThemedView style={styles.errorBanner}>
@@ -180,7 +208,56 @@ export default function MarkAttendanceScreen() {
         </ThemedView>
       )}
 
-      {displayStudents.length === 0 ? (
+      {selectedClass && (
+        <View style={styles.classFlowHeader}>
+          <TouchableOpacity onPress={() => setSelectedClass(null)} style={styles.classBackButton}>
+            <IconSymbol name="chevron.left" size={18} color={Colors[colorScheme ?? 'light'].tint} />
+            <ThemedText style={styles.classBackText}>Classes</ThemedText>
+          </TouchableOpacity>
+          <View style={styles.classBadgePill}>
+            <ThemedText style={styles.classBadgeText}>{selectedClass}</ThemedText>
+          </View>
+        </View>
+      )}
+
+      {!selectedClass ? (
+        <FlatList
+          data={availableClasses}
+          keyExtractor={(item) => item}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={Colors[colorScheme ?? 'light'].tint}
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <IconSymbol name="building.2.crop.circle" size={60} color="#999" />
+              <ThemedText style={styles.emptyTitle}>No Classes Assigned</ThemedText>
+              <ThemedText style={styles.emptySubtitle}>Assign classes to this staff account to start marking attendance.</ThemedText>
+            </View>
+          }
+          renderItem={({ item }) => {
+            const classStudents = students.filter((student: any) => normalizeClass(student?.class) === normalizeClass(item));
+            const markedCount = classStudents.filter((student: any) => markedStudentIds.has(normalizeId((student as any).id || (student as any)._id))).length;
+
+            return (
+              <TouchableOpacity style={styles.classCard} onPress={() => setSelectedClass(item)}>
+                <View style={{ flex: 1 }}>
+                  <ThemedText type="defaultSemiBold" style={styles.classCardTitle}>{item}</ThemedText>
+                  <ThemedText style={styles.classCardMeta}>{classStudents.length} students</ThemedText>
+                </View>
+                <View style={styles.classCardRight}>
+                  <ThemedText style={styles.classCardMarked}>{markedCount}/{classStudents.length}</ThemedText>
+                  <IconSymbol name="chevron.right" size={16} color="#94a3b8" />
+                </View>
+              </TouchableOpacity>
+            );
+          }}
+        />
+      ) : displayStudents.length === 0 ? (
         // Empty State with Manual Entry Option
         <ScrollView 
           style={{ flex: 1 }} 
@@ -194,9 +271,9 @@ export default function MarkAttendanceScreen() {
           }
         >
           <IconSymbol name="person.crop.circle.badge.exclamationmark" size={60} color="#999" />
-          <ThemedText style={styles.emptyTitle}>No Students Available</ThemedText>
+          <ThemedText style={styles.emptyTitle}>No Students in {selectedClass}</ThemedText>
           <ThemedText style={styles.emptySubtitle}>
-            Students data is not loading. You can manually add attendance.
+            This class has no mapped students. You can still add manual attendance.
           </ThemedText>
           <TouchableOpacity 
             style={styles.manualButton}
@@ -233,7 +310,10 @@ export default function MarkAttendanceScreen() {
         // Student List from API
         <FlatList
           data={displayStudents}
-          keyExtractor={(item) => item.id || item._id}
+          keyExtractor={(item) => {
+            const key = normalizeId((item as any).id || (item as any)._id || (item as any).rollNumber);
+            return key || `${(item as any).name || 'student'}-${(item as any).class || 'class'}`;
+          }}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl 
@@ -254,7 +334,7 @@ export default function MarkAttendanceScreen() {
             ) : null
           }
           ListFooterComponent={
-            students.length === 0 && manualRecords.length === 0 ? null : (
+            apiStudentsForClass.length === 0 && manualRecordsForClass.length === 0 ? null : (
               <TouchableOpacity 
                 style={styles.addManualButton}
                 onPress={() => setShowManualModal(true)}
@@ -265,13 +345,13 @@ export default function MarkAttendanceScreen() {
             )
           }
           renderItem={({ item: student }) => {
-            const studentId = student.id || student._id;
+            const studentId = normalizeId((student as any).id || (student as any)._id);
             let currentStatus: 'present' | 'absent' | 'late' | null = null;
             
             if (student.status) {
               currentStatus = student.status;
             } else {
-              const record = todayAttendance.find(r => r.studentId === studentId);
+              const record = todayAttendance.find(r => normalizeId(r.studentId) === studentId);
               currentStatus = record ? record.status : null;
             }
             
@@ -530,6 +610,67 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 8,
+  },
+  classFlowHeader: {
+    marginHorizontal: 16,
+    marginBottom: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  classBackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(128, 128, 128, 0.12)',
+  },
+  classBackText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  classBadgePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0, 102, 204, 0.15)',
+  },
+  classBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0066cc',
+  },
+  classCard: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(128, 128, 128, 0.08)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  classCardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  classCardMeta: {
+    fontSize: 12,
+    opacity: 0.65,
+    marginTop: 2,
+  },
+  classCardRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  classCardMarked: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#4CAF50',
   },
   statBadge: {
     flex: 1,

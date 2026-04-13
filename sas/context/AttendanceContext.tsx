@@ -27,6 +27,8 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const { token, isAuthenticated, loading: authLoading, user } = useAuth();
 
+  const normalizeId = (value: any) => String(value || '').trim();
+
   const refreshStudents = React.useCallback(async () => {
     try {
       if (!token) {
@@ -50,7 +52,7 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
 
       // Map MongoDB _id to id for compatibility
       const mappedData = studentList.map((student: any) => ({
-        id: student.id || student._id,
+        id: normalizeId(student.id || student._id),
         name: student.name,
         rollNumber: student.rollNumber,
         email: student.email,
@@ -82,9 +84,11 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
         .filter((record: any) => record && record.studentId) // Skip records with missing studentId
         .map((record: any) => ({
           id: record._id,
-          studentId: typeof record.studentId === 'object' && record.studentId?._id 
-            ? record.studentId._id 
-            : record.studentId,
+          studentId: normalizeId(
+            typeof record.studentId === 'object'
+              ? (record.studentId.studentId || record.studentId._id)
+              : record.studentId
+          ),
           date: record.date,
           status: record.status,
           remarks: record.remarks,
@@ -182,7 +186,8 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
   };
 
   const getStudentAttendance = (studentId: string) => {
-    return attendanceRecords.filter(record => record.studentId === studentId);
+    const normalizedStudentId = normalizeId(studentId);
+    return attendanceRecords.filter(record => normalizeId(record.studentId) === normalizedStudentId);
   };
 
   const getTodayAttendance = () => {

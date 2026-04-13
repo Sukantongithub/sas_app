@@ -15,7 +15,7 @@ interface Child {
   rollNumber?: string;
   class?: string;
   section?: string;
-  userId?: string;  // Student's User account ID for fetching attendance
+  userId?: string;
 }
 
 interface AttendanceStats {
@@ -43,6 +43,12 @@ export default function ParentAttendanceScreen() {
       fetchChildren();
     }
   }, [token]);
+
+  useEffect(() => {
+    if (token && selectedChild && view === 'details') {
+      fetchAttendanceForChild(selectedChild);
+    }
+  }, [activeTab]);
 
   const fetchChildren = async () => {
     if (!token) return;
@@ -79,28 +85,70 @@ export default function ParentAttendanceScreen() {
   };
 
   const fetchAttendanceForChild = async (child: Child) => {
-    if (!token || !child.userId) {
-      console.warn('Cannot fetch attendance: missing token or userId');
+    if (!token || !child._id) {
+      console.warn('Cannot fetch attendance: missing token or child id');
       return;
     }
+
+    setLoading(true);
     try {
-      let data;
+      let data: any;
       if (activeTab === 'day') {
-        data = await attendanceAPI.getStudentDaily(child.userId, undefined, token);
+        data = await attendanceAPI.getStudentDaily(child._id, undefined, token);
       } else if (activeTab === 'subject') {
-        data = await attendanceAPI.getStudentSubjectWise(child.userId, undefined, token);
+        data = await attendanceAPI.getStudentSubjectWise(child._id, undefined, token);
       } else {
-        data = await attendanceAPI.getStudentMonthly(child.userId, undefined, undefined, token);
+        data = await attendanceAPI.getStudentMonthly(child._id, undefined, undefined, token);
       }
 
-      if (data?.success) {
-        setAttendance(data.data || []);
-        if (data.stats) {
-          setStats(data.stats);
-        }
+      if (activeTab === 'day') {
+        const records = Array.isArray(data?.records) ? data.records : [];
+        setAttendance(records);
+        setStats({
+          totalClasses: Number(data?.summary?.totalPeriods || records.length || 0),
+          present: Number(data?.summary?.present || 0),
+          absent: Number(data?.summary?.absent || 0),
+          late: Number(data?.summary?.late || 0),
+          percentage: records.length > 0
+            ? Number(((Number(data?.summary?.present || 0) / records.length) * 100).toFixed(2))
+            : 0,
+        });
+      } else if (activeTab === 'subject') {
+        const subjectWise = Array.isArray(data?.subjectWise) ? data.subjectWise : [];
+        setAttendance(subjectWise);
+
+        const present = subjectWise.reduce((sum: number, item: any) => sum + Number(item?.present || 0), 0);
+        const absent = subjectWise.reduce((sum: number, item: any) => sum + Number(item?.absent || 0), 0);
+        const late = subjectWise.reduce((sum: number, item: any) => sum + Number(item?.late || 0), 0);
+        const totalClasses = subjectWise.reduce((sum: number, item: any) => sum + Number(item?.total || 0), 0);
+
+        setStats({
+          totalClasses,
+          present,
+          absent,
+          late,
+          percentage: totalClasses > 0 ? Number(((present / totalClasses) * 100).toFixed(2)) : 0,
+        });
+      } else {
+        const records = Array.isArray(data?.dailyBreakdown) ? data.dailyBreakdown : [];
+        setAttendance(records);
+
+        const monthlyStats = data?.monthlyStats || {};
+        setStats({
+          totalClasses: Number(monthlyStats?.totalClasses || 0),
+          present: Number(monthlyStats?.present || 0),
+          absent: Number(monthlyStats?.absent || 0),
+          late: Number(monthlyStats?.late || 0),
+          percentage: Number(monthlyStats?.percentage || 0),
+        });
       }
     } catch (error) {
       console.error('Error fetching attendance:', error);
+      setAttendance([]);
+      setStats(null);
+      Alert.alert('Error', 'Failed to load attendance details for the selected child');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -123,20 +171,37 @@ export default function ParentAttendanceScreen() {
       <View style={styles.cardHeader}>
         <View style={styles.cardContent}>
           <ThemedText type="defaultSemiBold" style={styles.cardTitle}>
-            {activeTab === 'day' ? new Date(item.date).toLocaleDateString() : item.subject}
+            {activeTab === 'day'
+              ? new Date(item.date).toLocaleDateString()
+              : activeTab === 'subject'
+                ? item.subject
+                : new Date(item.date).toLocaleDateString()}
           </ThemedText>
           <ThemedText style={styles.cardSubtitle}>
-            {item.subject || `Status: ${item.status}`}
+            {activeTab === 'day' && `Status: ${item.status}`}
+            {activeTab === 'subject' && `Total: ${item.total} | Present: ${item.present}`}
+            {activeTab === 'semester' && `Total: ${item.total} | Present: ${item.present}`}
           </ThemedText>
         </View>
-        <View style={[
-          styles.statusBadge,
-          { backgroundColor: item.status === 'present' ? '#4CAF50' : item.status === 'absent' ? '#F44336' : '#FF9800' }
-        ]}>
-          <ThemedText style={styles.statusText}>
-            {item.status?.charAt(0).toUpperCase() + item.status?.slice(1)}
-          </ThemedText>
-        </View>
+        {activeTab === 'day' ? (
+          <View style={[
+            styles.statusBadge,
+            { backgroundColor: item.status === 'present' ? '#4CAF50' : item.status === 'absent' ? '#F44336' : '#FF9800' }
+          ]}>
+            <ThemedText style={styles.statusText}>
+              {item.status?.charAt(0).toUpperCase() + item.status?.slice(1)}
+            </ThemedText>
+          </View>
+        ) : (
+          <View style={[
+            styles.statusBadge,
+            { backgroundColor: Number(item?.percentage || 0) >= 75 ? '#4CAF50' : Number(item?.percentage || 0) >= 60 ? '#FF9800' : '#F44336' }
+          ]}>
+            <ThemedText style={styles.statusText}>
+              {Number(item?.percentage || 0).toFixed(1)}%
+            </ThemedText>
+          </View>
+        )}
       </View>
     </ThemedView>
   );
@@ -236,12 +301,7 @@ export default function ParentAttendanceScreen() {
             {(['day', 'subject', 'semester'] as const).map((tab) => (
               <TouchableOpacity
                 key={tab}
-                onPress={() => {
-                  setActiveTab(tab);
-                  if (selectedChild) {
-                    fetchAttendanceForChild(selectedChild);
-                  }
-                }}
+                onPress={() => setActiveTab(tab)}
                 style={[
                   styles.tab,
                   activeTab === tab && styles.tabActive
@@ -264,7 +324,7 @@ export default function ParentAttendanceScreen() {
           ) : (
             <FlatList
               data={attendance}
-              keyExtractor={(item) => item._id}
+              keyExtractor={(item, index) => String(item?._id || item?.subject || item?.date || index)}
               contentContainerStyle={styles.listContent}
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
               renderItem={({ item }) => renderAttendanceCard(item)}

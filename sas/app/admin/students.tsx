@@ -197,7 +197,26 @@ export default function StudentsManagementScreen() {
     }
 
     try {
-      console.log('📤 Sending student data:', JSON.stringify(formData, null, 2));
+      const looksLikeEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+      const looksLikePhone = (value: string) => /^\+?[0-9 ()-]{7,20}$/.test(String(value || '').trim());
+
+      let normalizedParentPhone = String(formData.parentPhone || '').trim();
+      let normalizedParentEmail = String(formData.parentEmail || '').toLowerCase().trim();
+
+      // Auto-correct if user entered phone and email in opposite fields.
+      if (looksLikeEmail(normalizedParentPhone) && looksLikePhone(normalizedParentEmail)) {
+        const temp = normalizedParentPhone;
+        normalizedParentPhone = normalizedParentEmail;
+        normalizedParentEmail = temp;
+      }
+
+      const payload = {
+        ...formData,
+        parentPhone: normalizedParentPhone,
+        parentEmail: normalizedParentEmail,
+      };
+
+      console.log('📤 Sending student data:', JSON.stringify(payload, null, 2));
 
       const response = await fetch(`${API_BASE_URL}/admin/students`, {
         method: 'POST',
@@ -205,7 +224,7 @@ export default function StudentsManagementScreen() {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
       const responseData = await response.json();
@@ -213,6 +232,10 @@ export default function StudentsManagementScreen() {
       console.log('📥 Response data:', responseData);
 
       if (!response.ok) {
+        if (Array.isArray(responseData?.errors) && responseData.errors.length > 0) {
+          const details = responseData.errors.map((e: any) => e.msg || e.message || JSON.stringify(e)).join('\n');
+          throw new Error(`${responseData.message || 'Validation failed'}\n${details}`);
+        }
         throw new Error(responseData.message || 'Failed to create student');
       }
 

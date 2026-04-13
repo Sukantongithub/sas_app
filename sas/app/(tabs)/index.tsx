@@ -39,7 +39,6 @@ interface StudentRequest {
   startDate: string;
   endDate?: string;
   status?: string;
-  isUrgent?: boolean;
 }
 
 export default function StudentsScreen() {
@@ -104,7 +103,7 @@ export default function StudentsScreen() {
       const response = await studentManagementAPI.getApprovalQueue(undefined, undefined, token);
       console.log('Approval Queue Response:', response);
       
-      const all = [...(response.data?.urgent || []), ...(response.data?.normal || [])];
+      const all = response.data?.requests || response.requests || [];
       console.log('Processed requests:', all);
       
       setRequests(all);
@@ -159,7 +158,7 @@ export default function StudentsScreen() {
       <View style={styles.segmentedControl}>
         {[
           { key: 'students', icon: 'person.3.fill' as const, label: 'Students' },
-          { key: 'requests', icon: 'bell.badge.fill' as const, label: 'Requests' },
+          { key: 'requests', icon: 'list.bullet' as const, label: 'Requests' }, // Changed icon to remove urgency bias
           { key: 'analytics', icon: 'chart.bar.fill' as const, label: 'Stats' }
         ].map(tab => (
           <TouchableOpacity
@@ -330,24 +329,26 @@ export default function StudentsScreen() {
                 <View style={styles.timelineLine} />
                 <View style={[
                   styles.timelineMarker,
-                  {
-                    backgroundColor: item.isUrgent ? '#ff6b6b' : item.leaveType ? '#51cf66' : item.dutyType ? '#3b82f6' : '#64748b'
-                  }
+                  { backgroundColor: item.leaveType ? '#51cf66' : item.dutyType ? '#3b82f6' : '#64748b' }
                 ]} />
-                
                 <TouchableOpacity
                   onPress={() => setSelectedRequest(item)}
                   style={styles.timelineCard}
                   activeOpacity={0.7}>
                   <View style={styles.timelineHeader}>
+                    <View style={styles.requestAvatar}>
+                      <IconSymbol
+                        name="person.crop.circle.fill"
+                        size={24}
+                        color={Colors[colorScheme ?? 'light'].tint}
+                      />
+                    </View>
                     <ThemedText type="defaultSemiBold" style={styles.timelineStudentName}>
                       {item.studentName || 'Unknown Student'}
                     </ThemedText>
-                    {item.isUrgent && (
-                      <View style={styles.urgentBadgeSmall}>
-                        <ThemedText style={styles.urgentBadgeSmallText}>URGENT</ThemedText>
-                      </View>
-                    )}
+                    <View style={styles.requestBadge}>
+                      <ThemedText style={styles.requestBadgeText}>{item.leaveType || item.dutyType || item.__type || 'Request'}</ThemedText>
+                    </View>
                   </View>
                   
                   <View style={styles.timelineBody}>
@@ -393,7 +394,7 @@ export default function StudentsScreen() {
         canManage ? (
           <FlatList
             data={[]}
-            renderItem={null}
+            renderItem={() => null}
             contentContainerStyle={styles.listContent}
             refreshControl={
               <RefreshControl
@@ -798,7 +799,6 @@ const styles = StyleSheet.create({
 
   // Request Card
   requestCard: { backgroundColor: 'rgba(128, 128, 128, 0.04)', borderRadius: 16, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 2 },
-  urgentIndicator: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, backgroundColor: '#ff6b6b', borderTopLeftRadius: 16, borderBottomLeftRadius: 16 },
   requestHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   requestAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(128, 128, 128, 0.1)', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   requestInfo: { flex: 1 },
@@ -815,8 +815,6 @@ const styles = StyleSheet.create({
   timelineCard: { flex: 1, backgroundColor: 'rgba(128, 128, 128, 0.04)', borderRadius: 14, padding: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 2 },
   timelineHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   timelineStudentName: { fontSize: 15, flex: 1 },
-  urgentBadgeSmall: { backgroundColor: '#ff6b6b', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  urgentBadgeSmallText: { fontSize: 10, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
   timelineBody: { paddingTop: 4 },
   timelineType: { fontSize: 12, opacity: 0.6, marginBottom: 6, fontWeight: '500' },
   timelineReason: { fontSize: 13, opacity: 0.65, lineHeight: 18 },

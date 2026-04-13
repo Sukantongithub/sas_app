@@ -27,7 +27,6 @@ interface ApprovalRequest {
   studentName: string;
   reason: string;
   dates: string;
-  urgencyScore: number;
   status: string;
   createdAt: string;
   leaveType?: string;
@@ -54,7 +53,7 @@ export default function ApprovalDashboard() {
   const [selectedRequest, setSelectedRequest] = useState<ApprovalRequest | null>(null);
   const [remarks, setRemarks] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
-  const [filterType, setFilterType] = useState<'all' | 'urgent' | 'leaves' | 'onduty' | 'absence'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'leaves' | 'onduty' | 'absence'>('all');
   const [selectedRequests, setSelectedRequests] = useState<Set<string>>(new Set());
   const [batchMode, setBatchMode] = useState(false);
 
@@ -77,7 +76,6 @@ export default function ApprovalDashboard() {
         studentManagementAPI.getApprovalStats(token),
         studentManagementAPI.getApprovalQueue(
           filterType === 'leaves' ? 'leave' : filterType === 'onduty' ? 'on_duty' : filterType === 'absence' ? 'absence' : undefined,
-          filterType === 'urgent' ? 'urgent' : undefined,
           token
         )
       ]);
@@ -86,10 +84,7 @@ export default function ApprovalDashboard() {
       console.log('Requests Response:', requestsRes);
 
       setStats(statsRes.data);
-      const allRequests = [
-        ...(requestsRes.data?.urgent || []),
-        ...(requestsRes.data?.normal || [])
-      ];
+      const allRequests = requestsRes.data?.requests || requestsRes.requests || [];
       
       console.log('Processed Requests:', allRequests);
       setRequests(allRequests);
@@ -314,7 +309,6 @@ export default function ApprovalDashboard() {
         >
           {[
             { label: 'All', value: 'all' as const },
-            { label: 'Urgent', value: 'urgent' as const },
             { label: 'Leaves', value: 'leaves' as const },
             { label: 'On-Duty', value: 'onduty' as const },
             { label: 'Absence', value: 'absence' as const },
@@ -414,7 +408,6 @@ export default function ApprovalDashboard() {
             style={[
               styles.requestCard,
               { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground },
-              item.urgencyScore === 2 && styles.requestCardUrgent
             ]}
             onPress={() => {
               if (batchMode) {
@@ -465,16 +458,8 @@ export default function ApprovalDashboard() {
                         {item.requestType}
                       </ThemedText>
                     </View>
-                    {item.urgencyScore === 2 && (
-                      <View style={styles.urgentBadge}>
-                        <ThemedText style={styles.urgentBadgeText}>URGENT</ThemedText>
-                      </View>
-                    )}
                   </View>
                 </View>
-                {item.urgencyScore === 2 && (
-                  <IconSymbol name="exclamationmark.circle.fill" size={20} color="#ff6b6b" />
-                )}
               </View>
 
               <ThemedText style={styles.requestReason} numberOfLines={2}>
@@ -744,10 +729,6 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
-  requestCardUrgent: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#ff6b6b',
-  },
   checkbox: {
     paddingRight: 8,
     paddingTop: 4,
@@ -792,17 +773,6 @@ const styles = StyleSheet.create({
   typeBadgeText: {
     fontSize: 11,
     fontWeight: '500',
-  },
-  urgentBadge: {
-    backgroundColor: '#ff6b6b20',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  urgentBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#ff6b6b',
   },
   requestReason: {
     fontSize: 12,
