@@ -21,7 +21,7 @@ except:
 def predict():
     """
     Predict motion pattern authenticity
-    Expected JSON: {"motion_sequence": [10000, 15000, 12000, ...]}
+    Expected JSON: {"motion_sequence": [accelerometer magnitude samples]}
     """
     try:
         data = request.get_json()
@@ -48,7 +48,7 @@ def predict():
 @app.route('/api/predict-single', methods=['POST'])
 def predict_single():
     """
-    Predict with a single motion value or short sequence
+    Predict with a single accelerometer magnitude value or short sequence
     Expected JSON: {"motion_value": 25000} or {"motion_values": [25000, 24800, 25200]}
     """
     try:

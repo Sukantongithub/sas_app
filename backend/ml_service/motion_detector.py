@@ -14,6 +14,7 @@ class MotionPatternDetector:
     """
     Random Forest based Motion Pattern Detector
     Distinguishes between genuine and intentional (artificial) motion patterns
+    using scalar accelerometer magnitude sequences.
     """
     
     def __init__(self, model_path='motion_model.pkl'):
@@ -28,8 +29,8 @@ class MotionPatternDetector:
         
     def extract_features(self, motion_sequence):
         """
-        Extract features from motion sensor data sequence
-        motion_sequence: list of motion values [10000, 15000, 12000, ...]
+        Extract features from an accelerometer magnitude sequence.
+        motion_sequence: list of scalar motion values [10000, 15000, 12000, ...]
         """
         if len(motion_sequence) < 5:
             motion_sequence = list(motion_sequence) + [motion_sequence[-1]] * (5 - len(motion_sequence))
@@ -327,6 +328,37 @@ class MotionPatternDetector:
         prediction = self.model.predict(features_scaled)[0]
         probabilities = self.model.predict_proba(features_scaled)[0]
         confidence = probabilities[prediction]
+
+        motion_value = float(features[0])
+        motion_variance = float(features[1])
+        rate_of_change = float(features[2])
+        peak_ratio = float(features[3])
+        frequency_stability = float(features[4])
+        entropy = float(features[5])
+        motion_std = float(features[6])
+        motion_range = float(features[7])
+        spike_count = float(features[8])
+        regularity_score = float(features[9])
+
+        # Heuristic override for clearly artificial sequences.
+        # This catches intentional spike patterns even when the model is uncertain.
+        spike_ratio = spike_count / max(len(motion_sequence) - 1, 1)
+        heuristic_artificial = (
+            motion_std >= 1800 or
+            motion_range >= 7000 or
+            peak_ratio >= 1.8 or
+            rate_of_change >= 1200 or
+            spike_ratio >= 0.25 or
+            regularity_score >= 0.82 or
+            (motion_variance >= 2500000 and entropy <= 2.0)
+        )
+
+        if prediction == 0 and heuristic_artificial:
+            prediction = 1
+            confidence = max(confidence, 0.88)
+            probabilities = np.array([1.0 - confidence, confidence])
+        elif prediction == 1:
+            confidence = max(confidence, 0.75)
         
         if return_confidence:
             return {
@@ -337,7 +369,15 @@ class MotionPatternDetector:
                 'artificial_probability': float(probabilities[1]),
                 'features': {
                     name: float(val) for name, val in zip(self.feature_names, features)
-                }
+                },
+                'heuristic_override': bool(heuristic_artificial and prediction == 1),
+                'heuristic_score': float(max(
+                    motion_std / 5000.0,
+                    motion_range / 10000.0,
+                    rate_of_change / 3000.0,
+                    spike_ratio,
+                    regularity_score
+                ))
             }
         return prediction
     
