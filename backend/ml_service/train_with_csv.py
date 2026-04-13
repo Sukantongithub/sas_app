@@ -1,11 +1,13 @@
 """
-train_with_csv.py — Train Motion Pattern Detector using real IMU CSV data
-==========================================================================
-This script reads the motion_training_dataset.csv (columns: AX, AY, AZ,
-GX, GY, GZ, label) and trains the RandomForest motion classifier.
+train_with_csv.py — Train Motion Pattern Detector using real motion data
+=======================================================================
+This script can read either:
+    1) motion_training_dataset.csv (columns: AX, AY, AZ, label), or
+    2) two labeled JSON files (one natural, one artificial)
+and trains the RandomForest motion classifier.
 
 Strategy:
-  1. Load real IMU CSV → convert 6-axis rows to magnitude sequences
+    1. Load real IMU CSV → convert accelerometer rows to magnitude sequences
   2. Group rows into sequences per label (window_size rows per sequence)
   3. Mix real sequences with synthetic ones (expand real data via augmentation)
   4. Train the MotionPatternDetector on the combined dataset
@@ -14,6 +16,7 @@ Strategy:
 Usage:
     python train_with_csv.py
     python train_with_csv.py --csv motion_training_dataset.csv --synthetic 8000 --no-tune
+    python train_with_csv.py --natural-json ../datasets/natural_motions.json --artificial-json ../datasets/artificial_motions.json
 """
 
 import argparse
@@ -47,41 +50,92 @@ from motion_detector import (
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CSV Processing Helpers
+# Data Processing Helpers
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _safe_float(value, fallback=0.0):
+    try:
+        result = float(value)
+        if np.isnan(result):
+            return fallback
+        return result
+    except (TypeError, ValueError):
+        return fallback
 
 def load_csv(csv_path: str):
     """
     Load the IMU CSV and return (sequences_genuine, sequences_artificial).
 
     Each sequence is a list of scalar magnitude values derived from
-    the 6-axis IMU data:
-        magnitude = sqrt(AX^2 + AY^2 + AZ^2 + GX^2 + GY^2 + GZ^2)
+    the accelerometer-only IMU data:
+        magnitude = sqrt(AX^2 + AY^2 + AZ^2)
 
     All rows belonging to the same class are treated as one long stream;
     we then window them into overlapping sequences.
     """
     df = pd.read_csv(csv_path)
-    df.columns = [c.strip() for c in df.columns]
+    df.columns = [c.strip().upper() for c in df.columns]
 
     # Normalise label column
-    label_col = "label"
+    label_col = "LABEL"
     df[label_col] = df[label_col].str.strip().str.lower()
 
     print(f"\n  CSV loaded: {len(df)} rows, columns={list(df.columns)}")
     print(f"  Label distribution:\n{df[label_col].value_counts().to_string()}\n")
 
-    # Compute per-row magnitude (6-axis)
-    accel_cols = ["AX", "AY", "AZ"]
-    gyro_cols  = ["GX", "GY", "GZ"]
-    all_imu    = accel_cols + gyro_cols
+    # Compute per-row magnitude from accelerometer data only
+    accel_cols = [col for col in ["AX", "AY", "AZ"] if col in df.columns]
+    if len(accel_cols) != 3:
+        raise ValueError(
+            f"CSV must include AX, AY, and AZ columns. Found: {list(df.columns)}"
+        )
 
-    df["magnitude"] = np.sqrt((df[all_imu] ** 2).sum(axis=1))
+    df["magnitude"] = np.sqrt((df[accel_cols] ** 2).sum(axis=1))
 
     genuine_rows    = df[df[label_col] == "natural"]["magnitude"].tolist()
     artificial_rows = df[df[label_col] == "artificial"]["magnitude"].tolist()
 
     return genuine_rows, artificial_rows
+
+
+def load_json_labeled(json_path: str, label_name: str):
+    """
+    Load backend motion JSON and extract accelerometer magnitude values.
+    Expected rows contain AX/AY/AZ keys (case-insensitive) and optionally M.
+    """
+    with open(json_path, "r", encoding="utf-8") as f:
+        rows = json.load(f)
+
+    if not isinstance(rows, list):
+        raise ValueError(f"JSON must contain a top-level array. File: {json_path}")
+
+    magnitudes = []
+    skipped = 0
+
+    for row in rows:
+        if not isinstance(row, dict):
+            skipped += 1
+            continue
+
+        ax = _safe_float(row.get("ax", row.get("AX", 0.0)), 0.0)
+        ay = _safe_float(row.get("ay", row.get("AY", 0.0)), 0.0)
+        az = _safe_float(row.get("az", row.get("AZ", 0.0)), 0.0)
+
+        if ax == 0.0 and ay == 0.0 and az == 0.0:
+            m = _safe_float(row.get("m", row.get("M", np.nan)), np.nan)
+            if np.isfinite(m) and m > 0:
+                magnitudes.append(float(m))
+            else:
+                skipped += 1
+            continue
+
+        magnitudes.append(float(np.sqrt(ax ** 2 + ay ** 2 + az ** 2)))
+
+    print(
+        f"\n  JSON loaded ({label_name}): {len(rows)} rows, "
+        f"usable={len(magnitudes)}, skipped={skipped}"
+    )
+    return magnitudes
 
 
 def build_sequences_from_rows(rows, window: int = 20, step: int = 5):
@@ -130,6 +184,14 @@ def main():
         help="Path to the IMU training CSV"
     )
     parser.add_argument(
+        "--natural-json", type=str, default=None,
+        help="Path to JSON file containing natural motion samples"
+    )
+    parser.add_argument(
+        "--artificial-json", type=str, default=None,
+        help="Path to JSON file containing artificial motion samples"
+    )
+    parser.add_argument(
         "--synthetic", type=int, default=8000,
         help="Number of extra synthetic samples to add (balanced)"
     )
@@ -160,18 +222,36 @@ def main():
     rng = np.random.default_rng(args.seed)
 
     print("\n" + "=" * 65)
-    print("  MOTION DETECTOR — CSV-ENHANCED TRAINING")
+    print("  MOTION DETECTOR — REAL DATA TRAINING")
     print("=" * 65)
-    print(f"  CSV file        : {args.csv}")
+    if args.natural_json or args.artificial_json:
+        print(f"  Natural JSON    : {args.natural_json}")
+        print(f"  Artificial JSON : {args.artificial_json}")
+    else:
+        print(f"  CSV file        : {args.csv}")
     print(f"  Synthetic extra : {args.synthetic}")
     print(f"  CV folds        : {args.cv_folds}")
     print(f"  Hyper-tune      : {'No' if args.no_tune else 'Yes (GridSearchCV)'}")
     print(f"  Output dir      : {output_dir}")
     print(f"  Window size     : {args.window}")
 
-    # ── Step 1: Load CSV ──────────────────────────────────────────────────────
-    print("\n[1/6] Loading real IMU CSV …")
-    genuine_rows, artificial_rows = load_csv(args.csv)
+    # ── Step 1: Load real data ────────────────────────────────────────────────
+    if bool(args.natural_json) ^ bool(args.artificial_json):
+        raise ValueError("Provide both --natural-json and --artificial-json, or neither.")
+
+    if args.natural_json and args.artificial_json:
+        print("\n[1/6] Loading labeled JSON motion data …")
+        genuine_rows = load_json_labeled(args.natural_json, "natural")
+        artificial_rows = load_json_labeled(args.artificial_json, "artificial")
+    else:
+        print("\n[1/6] Loading real IMU CSV …")
+        genuine_rows, artificial_rows = load_csv(args.csv)
+
+    if len(genuine_rows) == 0 or len(artificial_rows) == 0:
+        raise ValueError(
+            "Need non-empty natural and artificial samples for training. "
+            f"Got natural={len(genuine_rows)}, artificial={len(artificial_rows)}"
+        )
 
     gen_seqs  = build_sequences_from_rows(genuine_rows,    window=args.window)
     art_seqs  = build_sequences_from_rows(artificial_rows, window=args.window)
@@ -346,7 +426,10 @@ def main():
         "feature_names":     FEATURE_NAMES,
         "best_params":       best_params,
         "cv_folds":          args.cv_folds,
-        "csv_path":          args.csv,
+        "data_source":       "json" if (args.natural_json and args.artificial_json) else "csv",
+        "csv_path":          args.csv if not (args.natural_json and args.artificial_json) else None,
+        "natural_json_path": args.natural_json,
+        "artificial_json_path": args.artificial_json,
         "window_size":       args.window,
         "cv_accuracy_mean":  round(float(cv_acc.mean()), 6),
         "cv_accuracy_std":   round(float(cv_acc.std()), 6),
