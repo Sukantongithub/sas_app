@@ -640,12 +640,46 @@ router.post('/students',
     body('class').notEmpty().withMessage('Class is required'),
     body('parentName').notEmpty().withMessage('Parent name is required'),
     body('parentPhone').notEmpty().withMessage('Parent phone is required'),
-    body('parentEmail').optional().isEmail().withMessage('Valid parent email is required')
+    body('parentEmail').optional({ checkFalsy: true }).isString()
   ],
   validateRequest,
   async (req, res) => {
     try {
       const { name, rollNumber, email, phone, class: studentClass, parentName, parentPhone, parentEmail, parentRelation } = req.body;
+
+      const looksLikeEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+      const looksLikePhone = (value) => /^\+?[0-9 ()-]{7,20}$/.test(String(value || '').trim());
+
+      let normalizedParentPhone = parentPhone ? String(parentPhone).trim() : '';
+      let normalizedParentEmail = parentEmail ? String(parentEmail).toLowerCase().trim() : '';
+
+      // Auto-correct common UI/input mistake: phone and email entered in opposite fields.
+      if (looksLikeEmail(normalizedParentPhone) && looksLikePhone(normalizedParentEmail)) {
+        const temp = normalizedParentPhone;
+        normalizedParentPhone = normalizedParentEmail;
+        normalizedParentEmail = temp;
+      }
+
+      if (!normalizedParentPhone) {
+        return res.status(400).json({
+          success: false,
+          message: 'Parent phone is required'
+        });
+      }
+
+      if (!looksLikePhone(normalizedParentPhone)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Parent phone number format is invalid'
+        });
+      }
+
+      if (normalizedParentEmail && !looksLikeEmail(normalizedParentEmail)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Parent email format is invalid'
+        });
+      }
 
       // Validate class and resolve classId before creating student
       const resolvedClass = await Class.findOne({ name: studentClass });
@@ -700,36 +734,90 @@ router.post('/students',
 
       // ============ Create Parent Account ============
       try {
-        // Generate default password for parent (parentPhone + studentRollNumber)
-        const defaultPassword = `${parentPhone}${rollNumber}`;
+        const fallbackParentEmail = `parent_${rollNumber}@school.local`;
 
-        // Create User account for parent
-        const parentUser = new User({
-          name: parentName,
-          email: parentEmail || `parent_${rollNumber}@school.local`,
-          password: defaultPassword, // Will be hashed by pre-save hook
-          role: 'parent',
-          isActive: true
-        });
+        let savedParentUser = null;
+        let savedParent = null;
+        let linkedExistingParent = false;
+        let defaultPassword = null;
 
-        const savedParentUser = await parentUser.save();
+        // Prefer matching by email; then fallback to phone via Parent profile lookup.
+        if (normalizedParentEmail) {
+          savedParentUser = await User.findOne({ email: normalizedParentEmail, role: 'parent' });
+        }
 
-        // Generate unique parent ID
-        const parentId = await generateParentId();
+        if (!savedParentUser && normalizedParentPhone) {
+          const parentByPhone = await Parent.findOne({ mobileNumber: normalizedParentPhone }).populate('userId');
+          if (parentByPhone?.userId && parentByPhone.userId.role === 'parent') {
+            savedParentUser = parentByPhone.userId;
+            savedParent = parentByPhone;
+          }
+        }
 
-        // Create Parent document
-        const parentDoc = new Parent({
-          userId: savedParentUser._id,
-          name: parentName,
-          parentId: parentId,
-          mobileNumber: parentPhone,
-          email: parentEmail || `parent_${rollNumber}@school.local`,
-          studentIds: [newStudent._id],
-          relation: parentRelation || 'guardian',
-          isActive: true
-        });
+        if (savedParentUser) {
+          linkedExistingParent = true;
+          if (!savedParent) {
+            savedParent = await Parent.findOne({ userId: savedParentUser._id });
+          }
 
-        const savedParent = await parentDoc.save();
+          // Backfill missing Parent document if user exists without profile.
+          if (!savedParent) {
+            const parentId = await generateParentId();
+            savedParent = await Parent.create({
+              userId: savedParentUser._id,
+              name: parentName || savedParentUser.name,
+              parentId,
+              mobileNumber: normalizedParentPhone || savedParentUser.phone || 'N/A',
+              email: normalizedParentEmail || savedParentUser.email,
+              studentIds: [],
+              relation: parentRelation || 'guardian',
+              isActive: true
+            });
+          }
+
+          // Keep parent profile contact fields fresh when possible.
+          await Parent.findByIdAndUpdate(savedParent._id, {
+            $set: {
+              name: parentName || savedParent.name,
+              mobileNumber: normalizedParentPhone || savedParent.mobileNumber,
+              email: normalizedParentEmail || savedParent.email,
+              relation: parentRelation || savedParent.relation || 'guardian'
+            },
+            $addToSet: { studentIds: newStudent._id }
+          });
+        } else {
+          // Generate default password for parent (parentPhone + studentRollNumber)
+          defaultPassword = `${normalizedParentPhone}${rollNumber}`;
+
+          // Create User account for parent
+          const parentUser = new User({
+            name: parentName,
+            email: normalizedParentEmail || fallbackParentEmail,
+            password: defaultPassword, // Will be hashed by pre-save hook
+            role: 'parent',
+            phone: normalizedParentPhone,
+            isActive: true
+          });
+
+          savedParentUser = await parentUser.save();
+
+          // Generate unique parent ID
+          const parentId = await generateParentId();
+
+          // Create Parent document
+          const parentDoc = new Parent({
+            userId: savedParentUser._id,
+            name: parentName,
+            parentId: parentId,
+            mobileNumber: normalizedParentPhone,
+            email: normalizedParentEmail || fallbackParentEmail,
+            studentIds: [newStudent._id],
+            relation: parentRelation || 'guardian',
+            isActive: true
+          });
+
+          savedParent = await parentDoc.save();
+        }
 
         // ============ Link Parent to Student ============
         console.log('🔗 Linking parent to student');
@@ -738,12 +826,10 @@ router.post('/students',
         console.log('  Parent Doc ID:', savedParent._id);
         
         // Ensure the Student document is fresh from DB before updating
-        let updatedStudent = await Student.findById(newStudent._id);
-        if (!updatedStudent.parentIds) {
-          updatedStudent.parentIds = [];
-        }
-        updatedStudent.parentIds.push(savedParentUser._id);
-        await updatedStudent.save();
+        await Student.findByIdAndUpdate(newStudent._id, {
+          $addToSet: { parentIds: savedParentUser._id }
+        });
+        const updatedStudent = await Student.findById(newStudent._id);
         
         console.log('✅ Student parentIds after update:', updatedStudent.parentIds);
         console.log('✅ Parent studentIds after create:', savedParent.studentIds);
@@ -754,7 +840,9 @@ router.post('/students',
 
         res.status(201).json({
           success: true,
-          message: 'Student and parent account created successfully',
+          message: linkedExistingParent
+            ? 'Student created and linked to existing parent account successfully'
+            : 'Student and parent account created successfully',
           data: {
             student: {
               id: newStudent._id,
@@ -771,12 +859,15 @@ router.post('/students',
             },
             parent: {
               id: savedParent._id,
-              name: parentName,
-              phone: parentPhone,
-              email: parentEmail || `parent_${rollNumber}@school.local`,
-              accountCreated: true,
-              defaultPassword: defaultPassword,
-              note: 'Please share this default password with parent and ask them to change it on first login'
+              name: savedParent.name,
+              phone: savedParent.mobileNumber,
+              email: savedParent.email,
+              accountCreated: !linkedExistingParent,
+              linkedExistingParent,
+              defaultPassword: linkedExistingParent ? null : defaultPassword,
+              note: linkedExistingParent
+                ? 'Linked student to the existing parent account'
+                : 'Please share this default password with parent and ask them to change it on first login'
             }
           }
         });

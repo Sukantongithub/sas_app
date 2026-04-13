@@ -4,7 +4,7 @@ const proxyLogSchema = new mongoose.Schema({
   // Student who triggered the proxy detection
   studentId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
+    ref: 'Student',
     required: true,
     index: true
   },

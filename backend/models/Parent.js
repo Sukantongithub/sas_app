@@ -78,6 +78,4 @@ const parentSchema = new mongoose.Schema({
   timestamps: true   // adds createdAt & updatedAt automatically
 });
 
-parentSchema.index({ parentId: 1 });
-
 module.exports = mongoose.model('Parent', parentSchema);

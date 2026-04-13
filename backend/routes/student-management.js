@@ -94,7 +94,7 @@ router.get('/my-children', requireAuth, asyncHandler(async (req, res) => {
 // @desc    Get all students with filters and attendance data
 // @access  Private (Admin, Teacher)
 router.get('/list', requireAuth, requireRoles('super_admin', 'admin', 'staff', 'hod'), asyncHandler(async (req, res) => {
-  const { class: classId, department, search, page = 1, limit = 20, status = 'active' } = req.query;
+  const { class: classId, department, search, page = 1, limit = 20, status } = req.query;
 
   let query = {};
 
@@ -108,7 +108,11 @@ router.get('/list', requireAuth, requireRoles('super_admin', 'admin', 'staff', '
 
   if (classId) query.classId = classId;
   if (department) query.department = department;
-  if (status) query.isActive = status === 'active';
+  // Do not default-filter on isActive because many legacy Student docs do not carry this field.
+  // Apply only when explicitly requested.
+  if (status === 'active' || status === 'inactive') {
+    query.isActive = status === 'active';
+  }
 
   // For staff/hod, only show students in their assigned classes
   if (req.user.role === 'staff' || req.user.role === 'hod') {
@@ -126,7 +130,13 @@ router.get('/list', requireAuth, requireRoles('super_admin', 'admin', 'staff', '
     }
 
     const classDocs = await Class.find({ _id: { $in: classIds } }).select('students');
-    const studentIds = [...new Set(classDocs.flatMap(cls => (cls.students || []).map(studentId => studentId.toString())))];
+    const studentIdsFromClasses = classDocs.flatMap(cls => (cls.students || []).map(studentId => studentId.toString()));
+
+    // Prefer authoritative mapping from Student.classId as class.students may be stale in some datasets.
+    const mappedStudents = await Student.find({ classId: { $in: classIds } }).select('_id');
+    const studentIdsFromMapping = mappedStudents.map(student => student._id.toString());
+
+    const studentIds = [...new Set([...studentIdsFromClasses, ...studentIdsFromMapping])];
     query._id = { $in: studentIds };
   }
 
@@ -155,14 +165,14 @@ router.get('/list', requireAuth, requireRoles('super_admin', 'admin', 'staff', '
       return {
         ...studentData,
         attendancePercentage: parseFloat(attendancePercentage),
-        status: student.isActive ? 'active' : 'inactive'
+        status: student.isActive === false ? 'inactive' : 'active'
       };
     } catch (err) {
       console.error(`Error calculating attendance for student ${student._id}:`, err);
       return {
         ...studentData,
         attendancePercentage: 0,
-        status: student.isActive ? 'active' : 'inactive'
+        status: student.isActive === false ? 'inactive' : 'active'
       };
     }
   }));
@@ -332,7 +342,7 @@ router.get('/:studentId/pending-requests', requireAuth, asyncHandler(async (req,
 // @desc    Get all requests awaiting approval (for admin/teacher) - UNIFIED
 // @access  Private (Admin, Teacher)
 router.get('/requests/approval-queue', requireAuth, requireRoles('super_admin', 'admin', 'staff', 'hod'), asyncHandler(async (req, res) => {
-  const { type = 'all', priority = 'all', sortBy = 'createdAt' } = req.query;
+  const { type = 'all', sortBy = 'createdAt' } = req.query;
   const OnDuty = require('../models/OnDuty');
   const AbsenceReason = require('../models/AbsenceReason');
 
@@ -356,15 +366,14 @@ router.get('/requests/approval-queue', requireAuth, requireRoles('super_admin', 
     ]);
 
     // Normalize all requests to a common format
-    const normalized = [
+    const requests = [
       ...leaveRequests.map(r => ({
         ...r,
         __type: 'leave',
         requestType: 'Leave',
         studentName: r.studentId?.name || 'Unknown',
         reason: r.reason,
-        dates: `${new Date(r.startDate).toLocaleDateString()} - ${new Date(r.endDate).toLocaleDateString()}`,
-        urgencyScore: new Date(r.startDate) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) ? 2 : 1
+        dates: `${new Date(r.startDate).toLocaleDateString()} - ${new Date(r.endDate).toLocaleDateString()}`
       })),
       ...onDutyRequests.map(r => ({
         ...r,
@@ -372,8 +381,7 @@ router.get('/requests/approval-queue', requireAuth, requireRoles('super_admin', 
         requestType: 'On-Duty',
         studentName: r.studentId?.name || 'Unknown',
         reason: r.reason,
-        dates: `${new Date(r.startDate).toLocaleDateString()} - ${new Date(r.endDate).toLocaleDateString()}`,
-        urgencyScore: new Date(r.startDate) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) ? 2 : 1
+        dates: `${new Date(r.startDate).toLocaleDateString()} - ${new Date(r.endDate).toLocaleDateString()}`
       })),
       ...absenceRequests.map(r => ({
         ...r,
@@ -381,23 +389,16 @@ router.get('/requests/approval-queue', requireAuth, requireRoles('super_admin', 
         requestType: 'Absence Reason',
         studentName: r.studentId?.name || 'Unknown',
         reason: r.reason,
-        dates: new Date(r.date).toLocaleDateString(),
-        urgencyScore: 2 // Absences are usually urgent
+        dates: new Date(r.date).toLocaleDateString()
       }))
     ];
 
     // Filter by type if specified
-    let filtered = type === 'all' ? normalized : normalized.filter(r => r.__type === type);
-
-    // Filter by priority if urgent only
-    if (priority === 'urgent') {
-      filtered = filtered.filter(r => r.urgencyScore === 2);
-    }
+    const filtered = type === 'all' ? requests : requests.filter(r => r.__type === type);
 
     // Sort requests
     const sortMap = {
       'createdAt': (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
-      'urgent': (a, b) => b.urgencyScore - a.urgencyScore,
       'studentName': (a, b) => a.studentName.localeCompare(b.studentName),
       'type': (a, b) => a.requestType.localeCompare(b.requestType),
       'earliest': (a, b) => new Date(a.startDate || a.date) - new Date(b.startDate || b.date)
@@ -406,10 +407,8 @@ router.get('/requests/approval-queue', requireAuth, requireRoles('super_admin', 
     const sortFn = sortMap[sortBy] || sortMap.createdAt;
     filtered.sort(sortFn);
 
-    // Group by urgency
-    const grouped = {
-      urgent: filtered.filter(r => r.urgencyScore === 2),
-      normal: filtered.filter(r => r.urgencyScore === 1),
+    const response = {
+      requests: filtered,
       stats: {
         totalPending: filtered.length,
         leaves: filtered.filter(r => r.__type === 'leave').length,
@@ -418,7 +417,7 @@ router.get('/requests/approval-queue', requireAuth, requireRoles('super_admin', 
       }
     };
 
-    sendSuccess(res, grouped, 200, 'Unified approval queue retrieved');
+    sendSuccess(res, response, 200, 'Unified approval queue retrieved');
   } catch (error) {
     handleError(res, error);
   }
