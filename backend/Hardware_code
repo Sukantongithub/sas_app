@@ -17,26 +17,17 @@ bool wifiConnected = false;
 unsigned long lastSend = 0;
 const int sendInterval = 2000;
 const char PAGE[] PROGMEM = R"rawliteral(
-<!DOCTYPE html>
-<html>
-<head>
-<title>ESP32 Setup</title>
-</head>
-<body>
-<h2>WiFi Setup</h2>
+<h2>ESP32 Setup</h2>
 <form action='/connect'>
-SSID: <input name='s'><br><br>
-Pass: <input name='p'><br><br>
-IP: <input name='ip'><br><br>
+SSID: <input name='s'><br>
+Pass: <input name='p'><br>
+IP: <input name='ip'><br>
 <input type='submit'>
 </form>
-</body>
-</html>
 )rawliteral";
 void setup() {
   Serial.begin(115200);
-  Wire.begin(21, 22);  
-  Wire.setClock(100000);
+  Wire.begin(21, 22);
   if (!accel.begin()) {
     while (1);
   }
@@ -70,13 +61,14 @@ void handleConnect() {
   ssid = server.arg("s");
   password = server.arg("p");
   backendIP = server.arg("ip");
-  server.send(200, "text/html", "Connecting to WiFi...");
+  server.send(200, "text/html", "Connecting...");
   WiFi.softAPdisconnect(true);
   WiFi.begin(ssid.c_str(), password.c_str());
   int timeout = 20;
   while (WiFi.status() != WL_CONNECTED && timeout--) {
     delay(500);
   }
+
   if (WiFi.status() == WL_CONNECTED) {
     wifiConnected = true;
   }
