@@ -10,6 +10,219 @@ const Staff = require('../models/Staff');
 const User = require('../models/User');
 const { requireAuth, requireRoles, requireSelfOrRoles } = require('../middleware/auth');
 
+const STAFF_ROLES = ['super_admin', 'admin', 'hod', 'faculty', 'teacher', 'staff'];
+
+// Allow staff roles, student self, and parent linked to the requested student.
+const requireStudentAttendanceAccess = async (req, res, next) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const targetStudentId = String(req.params.studentId || req.body.studentId || '').trim();
+    if (!targetStudentId) {
+      return res.status(400).json({ message: 'studentId is required' });
+    }
+
+    if (STAFF_ROLES.includes(req.user.role)) {
+      return next();
+    }
+
+    if (req.user.role === 'student') {
+      const userIdStr = String(req.user._id);
+      const userStudentIdStr = req.user.studentId ? String(req.user.studentId._id || req.user.studentId) : null;
+      if (targetStudentId === userIdStr || (userStudentIdStr && targetStudentId === userStudentIdStr)) {
+        return next();
+      }
+      return res.status(403).json({ message: 'Forbidden: insufficient permission' });
+    }
+
+    if (req.user.role === 'parent') {
+      let student = await Student.findById(targetStudentId).select('_id parentIds userId');
+      if (!student) {
+        student = await Student.findOne({ userId: targetStudentId }).select('_id parentIds userId');
+      }
+
+      if (!student) {
+        return res.status(404).json({ message: 'Student not found' });
+      }
+
+      const isLinkedParent = Array.isArray(student.parentIds)
+        && student.parentIds.some((pid) => String(pid) === String(req.user._id));
+
+      if (!isLinkedParent) {
+        return res.status(403).json({ message: 'Forbidden: insufficient permission' });
+      }
+
+      // Normalize downstream handlers to always query by Student._id.
+      req.params.studentId = String(student._id);
+      return next();
+    }
+
+    return res.status(403).json({ message: 'Forbidden: insufficient permission' });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// Enforce period-specific access: verify faculty can only mark attendance during their assigned timetable periods for the class.
+const requirePeriodSpecificAccess = async (req, res, next) => {
+  try {
+    // Only enforce for non-admin roles (admin can mark anytime)
+    if (['super_admin', 'admin'].includes(req.user.role)) {
+      return next();
+    }
+
+    // Get classId from request
+    const classId = String(req.body.classId || '').trim();
+    if (!classId) {
+      return res.status(400).json({ 
+        message: 'classId is required for attendance marking',
+        code: 'MISSING_CLASS_ID'
+      });
+    }
+
+    // Get staff record for the logged-in user
+    const staff = await Staff.findOne({ userId: req.user._id }).select('_id assignedClassIds employeeId');
+    if (!staff) {
+      return res.status(403).json({ 
+        message: 'Unauthorized: staff member record not found',
+        code: 'STAFF_NOT_FOUND'
+      });
+    }
+
+    // Verify class is assigned to this staff
+    const isClassAssigned = staff.assignedClassIds.some(
+      (acId) => String(acId) === String(classId)
+    );
+    
+    if (!isClassAssigned) {
+      return res.status(403).json({ 
+        message: 'Forbidden: this class is not assigned to your timetable',
+        code: 'CLASS_NOT_ASSIGNED',
+        details: {
+          staffId: staff._id,
+          requestedClassId: classId,
+          assignedClasses: staff.assignedClassIds.length,
+          hint: 'Contact your HOD to be assigned to this class'
+        }
+      });
+    }
+
+    // Get the marking date (from request body)
+    const markingDate = new Date(req.body.date || new Date());
+    const dateStr = markingDate.toISOString().split('T')[0];
+    const dayOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][
+      markingDate.getDay()
+    ];
+
+    // Get timetable for this class on this day
+    const timetable = await Timetable.findOne({
+      classId,
+      dayOfWeek,
+      isActive: true,
+      effectiveFrom: { $lte: new Date() },
+      $or: [{ effectiveTo: null }, { effectiveTo: { $gte: new Date() } }]
+    });
+
+    if (!timetable || !timetable.periods || timetable.periods.length === 0) {
+      return res.status(403).json({ 
+        message: 'Forbidden: no active timetable found for this class on this day',
+        code: 'NO_TIMETABLE',
+        details: {
+          classId,
+          date: dateStr,
+          dayOfWeek,
+          hint: 'Contact your HOD to set up the timetable for this class'
+        }
+      });
+    }
+
+    // Verify this faculty teaches any period in the timetable
+    const facultyTeachesToday = timetable.periods.some(
+      (period) => String(period.teacherId) === String(req.user._id)
+    );
+
+    if (!facultyTeachesToday) {
+      const teacherIds = timetable.periods.map(p => p.teacherId).filter(Boolean);
+      return res.status(403).json({ 
+        message: 'Forbidden: you are not assigned to teach this class on this day',
+        code: 'NOT_SCHEDULED_TODAY',
+        details: {
+          classId,
+          date: dateStr,
+          dayOfWeek,
+          scheduledTeachers: teacherIds.length,
+          hint: 'Check your timetable or contact your HOD'
+        }
+      });
+    }
+
+    // Get current time for time window check
+    const now = new Date();
+    const currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    // Find the faculty's assigned periods for today and check time windows
+    const facultyPeriods = timetable.periods.filter(
+      (period) => String(period.teacherId) === String(req.user._id)
+    );
+
+    // Check if current time is within 15 minutes before or 30 minutes after any of the faculty's periods
+    const isWithinTimeWindow = facultyPeriods.some((period) => {
+      const [startHour, startMin] = period.startTime.split(':').map(Number);
+      const [endHour, endMin] = period.endTime.split(':').map(Number);
+
+      const periodStartMinutes = startHour * 60 + startMin;
+      const periodEndMinutes = endHour * 60 + endMin;
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+      // Allow marking 15 minutes before period start through 30 minutes after period end
+      const windowStart = periodStartMinutes - 15;
+      const windowEnd = periodEndMinutes + 30;
+
+      return currentMinutes >= windowStart && currentMinutes <= windowEnd;
+    });
+
+    if (!isWithinTimeWindow) {
+      const periodTimes = facultyPeriods
+        .map((p) => `${p.periodNumber}: ${p.startTime}-${p.endTime}`)
+        .join(', ');
+      
+      return res.status(403).json({ 
+        message: 'Forbidden: attendance marking is only allowed during your scheduled periods',
+        code: 'OUTSIDE_PERIOD_TIME',
+        details: {
+          classId,
+          date: dateStr,
+          dayOfWeek,
+          currentTime: currentTimeStr,
+          scheduledPeriods: periodTimes,
+          allowedWindow: '15 min before to 30 min after period',
+          hint: 'Please mark attendance during your assigned teaching time'
+        }
+      });
+    }
+
+    // All checks passed - attach audit info to request for logging
+    req.markingContext = {
+      staffId: staff._id,
+      classId,
+      date: dateStr,
+      facultyCode: `${dayOfWeek.toUpperCase()}-${facultyPeriods.map(p => p.periodNumber).join(',')}`,
+      timestamp: new Date()
+    };
+
+    return next();
+  } catch (error) {
+    console.error('Period-specific access validation error:', error);
+    return res.status(500).json({ 
+      message: 'Error validating period-specific access',
+      code: 'VALIDATION_ERROR',
+      error: error.message 
+    });
+  }
+};
+
 // Get all attendance records
 router.get('/', requireAuth, requireRoles('super_admin', 'admin', 'hod', 'faculty', 'teacher', 'staff'), async (req, res) => {
   try {
@@ -68,7 +281,7 @@ router.get('/today', requireAuth, requireRoles('super_admin', 'admin', 'hod', 'f
 
       return session._id;
     };
-router.get('/student/:studentId', requireAuth, requireSelfOrRoles({ roles: ['super_admin', 'admin', 'hod', 'faculty', 'teacher', 'staff'] }), async (req, res) => {
+router.get('/student/:studentId', requireAuth, requireStudentAttendanceAccess, async (req, res) => {
   try {
     const records = await Attendance.find({ studentId: req.params.studentId })
       .sort({ date: -1 });
@@ -98,7 +311,7 @@ router.get('/student/:studentId', requireAuth, requireSelfOrRoles({ roles: ['sup
 // @route   GET /api/attendance/student/:studentId/daily
 // @desc    Get student's daily attendance status
 // @access  Private (Student can view own, others as per auth)
-router.get('/student/:studentId/daily', requireAuth, requireSelfOrRoles({ roles: ['super_admin', 'admin', 'hod', 'faculty', 'teacher', 'staff'] }), async (req, res) => {
+router.get('/student/:studentId/daily', requireAuth, requireStudentAttendanceAccess, async (req, res) => {
   try {
     const { date } = req.query;
     const targetDate = date || new Date().toISOString().split('T')[0];
@@ -128,7 +341,7 @@ router.get('/student/:studentId/daily', requireAuth, requireSelfOrRoles({ roles:
 // @route   GET /api/attendance/student/:studentId/subject-wise
 // @desc    Get subject/period-wise attendance for a student
 // @access  Private (Student can view own, others as per auth)
-router.get('/student/:studentId/subject-wise', requireAuth, requireSelfOrRoles({ roles: ['super_admin', 'admin', 'hod', 'faculty', 'teacher', 'staff'] }), async (req, res) => {
+router.get('/student/:studentId/subject-wise', requireAuth, requireStudentAttendanceAccess, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     
@@ -183,7 +396,7 @@ router.get('/student/:studentId/subject-wise', requireAuth, requireSelfOrRoles({
 // @route   GET /api/attendance/student/:studentId/monthly
 // @desc    Get monthly attendance percentage for a student
 // @access  Private (Student can view own, others as per auth)
-router.get('/student/:studentId/monthly', requireAuth, requireSelfOrRoles({ roles: ['super_admin', 'admin', 'faculty', 'teacher'] }), async (req, res) => {
+router.get('/student/:studentId/monthly', requireAuth, requireStudentAttendanceAccess, async (req, res) => {
   try {
     const { year, month } = req.query;
     const targetYear = year ? parseInt(year) : new Date().getFullYear();
@@ -251,7 +464,7 @@ router.get('/student/:studentId/monthly', requireAuth, requireSelfOrRoles({ role
 // @route   GET /api/attendance/student/:studentId/time-records
 // @desc    Get in-time and out-time records for a student
 // @access  Private (Student can view own, others as per auth)
-router.get('/student/:studentId/time-records', requireAuth, requireSelfOrRoles({ roles: ['super_admin', 'admin', 'faculty', 'teacher'] }), async (req, res) => {
+router.get('/student/:studentId/time-records', requireAuth, requireStudentAttendanceAccess, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     
@@ -381,7 +594,7 @@ router.get('/staff/:staffId/unmarked-students', requireAuth, requireRoles('super
 });
 
 // Mark attendance (create or update)
-router.post('/', requireAuth, requireRoles('super_admin', 'admin', 'hod', 'faculty', 'teacher', 'staff'), async (req, res) => {
+router.post('/', requireAuth, requireRoles('super_admin', 'admin', 'hod', 'faculty', 'teacher', 'staff'), requirePeriodSpecificAccess, async (req, res) => {
   try {
     const { studentId, date, status, remarks, classId, sessionId, entryTime } = req.body;
 
@@ -419,6 +632,34 @@ router.post('/', requireAuth, requireRoles('super_admin', 'admin', 'hod', 'facul
     // Normalize date to date-only format (YYYY-MM-DD)
     const dateStr = new Date(date).toISOString().split('T')[0];
 
+    // Get timetable period info for audit trail
+    const markingDate = new Date(date);
+    const dayOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][
+      markingDate.getDay()
+    ];
+    
+    let periodInfo = null;
+    const timetable = await Timetable.findOne({
+      classId: finalClassId,
+      dayOfWeek,
+      isActive: true
+    });
+
+    if (timetable && timetable.periods && timetable.periods.length > 0) {
+      const facultyPeriod = timetable.periods.find(
+        (period) => String(period.teacherId) === String(req.user._id)
+      );
+      if (facultyPeriod) {
+        periodInfo = {
+          timetableId: timetable._id,
+          periodNumber: facultyPeriod.periodNumber,
+          dayOfWeek,
+          scheduledStartTime: facultyPeriod.startTime,
+          scheduledEndTime: facultyPeriod.endTime
+        };
+      }
+    }
+
     // Check if attendance already exists for this student and date
     let attendance = await Attendance.findOne({ 
       studentId, 
@@ -432,6 +673,9 @@ router.post('/', requireAuth, requireRoles('super_admin', 'admin', 'hod', 'facul
       attendance.verificationMethod = 'manual';
       attendance.markedAt = new Date();
       attendance.markedBy = req.user._id;
+      if (periodInfo) {
+        attendance.periodInfo = periodInfo;
+      }
 
       if (!attendance.sessionId) {
         attendance.sessionId = await getFallbackSessionId({
@@ -445,7 +689,8 @@ router.post('/', requireAuth, requireRoles('super_admin', 'admin', 'hod', 'facul
       return res.json({
         status: 'success',
         message: 'Attendance updated successfully',
-        data: attendance
+        data: attendance,
+        audit: req.markingContext // Include audit context in response
       });
     } else {
       // Create new attendance record
@@ -466,14 +711,16 @@ router.post('/', requireAuth, requireRoles('super_admin', 'admin', 'hod', 'facul
         exitTime: null,
         verificationMethod: 'manual',
         markedBy: req.user._id,
-        markedAt: new Date()
+        markedAt: new Date(),
+        periodInfo: periodInfo // Include period audit info
       });
 
       const newAttendance = await attendance.save();
       return res.status(201).json({
         status: 'success',
         message: 'Attendance marked successfully',
-        data: newAttendance
+        data: newAttendance,
+        audit: req.markingContext // Include audit context in response
       });
     }
   } catch (error) {
@@ -487,7 +734,7 @@ router.post('/', requireAuth, requireRoles('super_admin', 'admin', 'hod', 'facul
 });
 
 // Mark attendance for multiple students
-router.post('/bulk', requireAuth, requireRoles('super_admin', 'admin', 'hod', 'faculty', 'teacher', 'staff'), async (req, res) => {
+router.post('/bulk', requireAuth, requireRoles('super_admin', 'admin', 'hod', 'faculty', 'teacher', 'staff'), requirePeriodSpecificAccess, async (req, res) => {
   try {
     const { records, classId, sessionId } = req.body; // Array of { studentId, date, status, remarks, classId (optional) }
     
@@ -590,7 +837,8 @@ router.post('/bulk', requireAuth, requireRoles('super_admin', 'admin', 'hod', 'f
         updated: results.filter(r => r.status === 'updated').length
       },
       results,
-      errors: errors.length > 0 ? errors : undefined
+      errors: errors.length > 0 ? errors : undefined,
+      audit: req.markingContext // Include audit context in response
     });
   } catch (error) {
     console.error('Bulk attendance marking error:', error);

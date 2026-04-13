@@ -4,7 +4,7 @@ const attendanceSchema = new mongoose.Schema({
   // Student information
   studentId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
+    ref: 'Student',
     required: true,
     index: true
   },
@@ -198,6 +198,18 @@ const attendanceSchema = new mongoose.Schema({
     maxlength: 500
   },
   
+  // Period information for audit trail (when marking was done during the timetable period)
+  periodInfo: {
+    timetableId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Timetable'
+    },
+    periodNumber: Number,
+    dayOfWeek: String,
+    scheduledStartTime: String, // HH:MM format
+    scheduledEndTime: String    // HH:MM format
+  },
+
   markedAt: {
     type: Date,
     default: Date.now
