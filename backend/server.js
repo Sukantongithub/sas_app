@@ -22,6 +22,7 @@ const studentInteractionsRoutes = require('./routes/student-interactions');
 const teacherRoutes = require('./routes/teachers');
 const messageRoutes = require('./routes/messages');
 const studentManagementRoutes = require('./routes/student-management');
+const autoAttendanceService = require('./services/autoAttendanceService');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -35,6 +36,14 @@ let mlServerConnected = false;
 const DATASET_DIR = process.env.DATASET_DIR || path.join(__dirname, "datasets");
 const DATASET_FILE = path.join(DATASET_DIR, "raw_motions.json");
 const LABELED_DATASET_FILE = path.join(DATASET_DIR, "labeled_motions.json");
+
+// Motion Detection Thresholds
+const MOTION_THRESHOLDS = {
+  MIN_MAGNITUDE: parseFloat(process.env.MOTION_MIN_MAGNITUDE || '1'),     // Very low for testing
+  MAX_MAGNITUDE: parseFloat(process.env.MOTION_MAX_MAGNITUDE || '100000'), // High limit
+  SPIKE_DETECTION: parseFloat(process.env.MOTION_SPIKE_DETECTION || '5000'),
+  ARTIFICIAL_THRESHOLD: parseFloat(process.env.ARTIFICIAL_MOTION_THRESHOLD || '0.7')
+};
 
 // Create dataset directory
 if (!fs.existsSync(DATASET_DIR)) {
@@ -81,29 +90,65 @@ app.use(limiter);
 // ============================================
 // Dataset Management Functions
 // ============================================
+function calculateMotionMagnitude(ax, ay, az) {
+  const x = parseFloat(ax) || 0;
+  const y = parseFloat(ay) || 0;
+  const z = parseFloat(az) || 0;
+  return Math.sqrt(x ** 2 + y ** 2 + z ** 2);
+}
+
 function saveDataset() {
   try {
     fs.writeFileSync(DATASET_FILE, JSON.stringify(rawDataset, null, 2));
+    console.log(`📁 Dataset saved (${rawDataset.length} samples)`);
   } catch (e) {
     console.error("Error saving dataset:", e);
   }
 }
 
 function addToDataset(data) {
+  const ax = parseFloat(data.ax) || 0;
+  const ay = parseFloat(data.ay) || 0;
+  const az = parseFloat(data.az) || 0;
+  
+  // Calculate magnitude if not provided
+  let magnitude = parseFloat(data.m) || parseFloat(data.magnitude) || 0;
+  if (magnitude === 0 || !isFinite(magnitude)) {
+    magnitude = calculateMotionMagnitude(ax, ay, az);
+  }
+
+  // Apply motion thresholds - filter out very small movements
+  if (magnitude < MOTION_THRESHOLDS.MIN_MAGNITUDE) {
+    console.log(`⚠️ Motion below threshold (${magnitude.toFixed(2)} < ${MOTION_THRESHOLDS.MIN_MAGNITUDE}), skipping`);
+    return;
+  }
+
+  // Cap at maximum reasonable value to detect anomalies
+  if (magnitude > MOTION_THRESHOLDS.MAX_MAGNITUDE) {
+    console.log(`⚡ Motion spike detected: ${magnitude.toFixed(2)}`);
+  }
+
   const entry = {
     timestamp: new Date().toISOString(),
-    id: data.id || "unknown",
-    ax: parseFloat(data.ax) || 0,
-    ay: parseFloat(data.ay) || 0,
-    az: parseFloat(data.az) || 0,
-    m: parseFloat(data.m) || 0,
-    r: parseInt(data.r) || -50,
+    id: data.deviceId || data.id || "unknown",
+    ax: ax.toFixed(2),
+    ay: ay.toFixed(2),
+    az: az.toFixed(2),
+    m: magnitude.toFixed(2),           // magnitude display field
+    motionMagnitude: magnitude,         // full precision
+    sensorSource: "accelerometer",
+    r: parseInt(data.r) || parseInt(data.rssi) || -50,
     ip: data.ip || "unknown",
   };
 
   rawDataset.push(entry);
-  saveDataset();
-  console.log(`💾 Dataset saved (${rawDataset.length} samples)`);
+  
+  // Save dataset every 10 entries to reduce I/O
+  if (rawDataset.length % 10 === 0) {
+    saveDataset();
+  }
+  
+  console.log(`💾 Motion recorded: M=${magnitude.toFixed(2)} (Ax=${ax.toFixed(2)}, Ay=${ay.toFixed(2)}, Az=${az.toFixed(2)})`);
 }
 
 // ============================================
@@ -135,11 +180,17 @@ function checkMLServer() {
 function sendToMLServer(data) {
   if (!mlServerConnected) return;
 
+  // Ensure magnitude is calculated
+  const ax = parseFloat(data.ax) || 0;
+  const ay = parseFloat(data.ay) || 0;
+  const az = parseFloat(data.az) || 0;
+  const magnitude = parseFloat(data.m) || calculateMotionMagnitude(ax, ay, az);
+
   const payload = JSON.stringify({
-    ax: parseFloat(data.ax) || 0,
-    ay: parseFloat(data.ay) || 0,
-    az: parseFloat(data.az) || 0,
-    m: parseFloat(data.m) || 0,
+    ax: ax,
+    ay: ay,
+    az: az,
+    m: magnitude,
     r: parseInt(data.r) || -50,
   });
 
@@ -181,7 +232,7 @@ setInterval(checkMLServer, 5000);
 // ============================================
 // Motion Recording Endpoints
 // ============================================
-function recordMotion(req, res) {
+async function recordMotion(req, res) {
   let data = req.body;
 
   if (typeof data === "string") {
@@ -199,45 +250,115 @@ function recordMotion(req, res) {
     data = {};
   }
 
+  // Ensure all motion values are present and numeric
+  const ax = parseFloat(data.ax) || parseFloat(data.x) || 0;
+  const ay = parseFloat(data.ay) || parseFloat(data.y) || 0;
+  const az = parseFloat(data.az) || parseFloat(data.z) || 0;
+  
+  // Calculate motion magnitude
+  const magnitude = calculateMotionMagnitude(ax, ay, az);
+
+  // Create enriched entry with all calculated fields
   const entry = {
     time: new Date().toISOString(),
     ip: req.ip,
+    ax: ax.toFixed(2),
+    ay: ay.toFixed(2),
+    az: az.toFixed(2),
+    m: magnitude.toFixed(2),           // Calculated magnitude
+    deviceId: data.deviceId || data.id,
+    r: parseInt(data.r) || parseInt(data.rssi) || -50,
+    timestamp: data.timestamp,
     ...data,
   };
 
-  motions.unshift(entry);
-  if (motions.length > 100) motions.pop();
+  // Apply threshold before recording
+  if (magnitude >= MOTION_THRESHOLDS.MIN_MAGNITUDE) {
+    motions.unshift(entry);
+    if (motions.length > 100) motions.pop();
+    
+    console.log(`📊 Motion: M=${magnitude.toFixed(2)} Ax=${ax.toFixed(2)} Ay=${ay.toFixed(2)} Az=${az.toFixed(2)} RSSI=${entry.r}`);
+    
+    // Add to persistent dataset
+    addToDataset(entry);
+  } else {
+    console.log(`⚠️ Motion too small (${magnitude.toFixed(2)}), filtered by threshold`);
+  }
 
-  console.log("📊 Motion:", entry);
+  let autoAttendance = null;
+  try {
+    autoAttendance = await autoAttendanceService.processMotionReading(entry);
 
-  addToDataset(entry);
-  sendToMLServer(entry);
+    if (autoAttendance?.analysis) {
+      mlPredictions.unshift(autoAttendance.analysis);
+      if (mlPredictions.length > 50) mlPredictions.pop();
+    }
+  } catch (error) {
+    console.error('Auto attendance processing error:', error.message);
+  }
 
-  res.status(200).json({ ok: true });
+  res.status(200).json({
+    ok: true,
+    magnitude: magnitude,
+    axes: { ax, ay, az },
+    thresholdApplied: magnitude < MOTION_THRESHOLDS.MIN_MAGNITUDE,
+    autoAttendance: autoAttendance ? {
+      bufferSize: autoAttendance.bufferSize,
+      analysis: autoAttendance.analysis,
+      attendance: autoAttendance.attendance
+    } : null
+  });
 }
 
 app.post("/motion", recordMotion);
 app.post("/gyro", recordMotion);
 
 app.get("/motion", (req, res) => {
+  // Parse all possible axis names
+  const ax = parseFloat(req.query.ax) || parseFloat(req.query.x) || 0;
+  const ay = parseFloat(req.query.ay) || parseFloat(req.query.y) || 0;
+  const az = parseFloat(req.query.az) || parseFloat(req.query.z) || 0;
+  const magnitude = calculateMotionMagnitude(ax, ay, az);
+
   const entry = {
     time: new Date().toISOString(),
     ip: req.ip,
+    ax: ax.toFixed(2),
+    ay: ay.toFixed(2),
+    az: az.toFixed(2),
+    m: magnitude.toFixed(2),
+    r: parseInt(req.query.r) || parseInt(req.query.rssi) || -50,
     ...req.query,
   };
 
-  motions.unshift(entry);
-  if (motions.length > 100) motions.pop();
+  // Apply threshold
+  if (magnitude >= MOTION_THRESHOLDS.MIN_MAGNITUDE) {
+    motions.unshift(entry);
+    if (motions.length > 100) motions.pop();
+    
+    console.log(`📊 Motion (GET): M=${magnitude.toFixed(2)} Ax=${ax.toFixed(2)} Ay=${ay.toFixed(2)} Az=${az.toFixed(2)}`);
+    sendToMLServer(entry);
+  }
 
-  sendToMLServer(entry);
-  res.status(200).json({ ok: true, source: "query" });
+  res.status(200).json({ 
+    ok: true, 
+    source: "query",
+    magnitude: magnitude,
+    thresholdApplied: magnitude < MOTION_THRESHOLDS.MIN_MAGNITUDE
+  });
 });
 
 // ============================================
 // Motion Data API Endpoints
 // ============================================
 app.get("/motions", (_req, res) => {
-  res.json(motions);
+  // Return motions with calculated magnitude for all
+  const enriched = motions.map(m => ({
+    ...m,
+    m: m.m || calculateMotionMagnitude(m.ax, m.ay, m.az).toFixed(2),
+    az: m.az !== undefined ? m.az : '0'  // Ensure Z-axis is present
+  }));
+  res.json(enriched);
 });
 
 app.get("/predictions", (_req, res) => {
@@ -251,7 +372,283 @@ app.get("/stats", (_req, res) => {
     total_predictions: mlPredictions.length,
     ml_connected: mlServerConnected,
     latest_prediction: pred || null,
+    motion_thresholds: MOTION_THRESHOLDS,
+    recent_motions: motions.slice(0, 5).map(m => ({
+      time: m.time,
+      magnitude: m.m,
+      axes: { ax: m.ax, ay: m.ay, az: m.az },
+      ip: m.ip
+    }))
   });
+});
+
+// ============================================
+// Test Data Endpoints (for development/testing)
+// ============================================
+
+/**
+ * POST /test/motion - Generate test motion data
+ * Query params:
+ *   count: number of test samples (default: 1)
+ *   pattern: 'natural' or 'artificial' (default: 'natural')
+ */
+app.post("/test/motion", (req, res) => {
+  const count = parseInt(req.query.count || "1", 10);
+  const pattern = req.query.pattern || "natural";
+  
+  const generated = [];
+  
+  for (let i = 0; i < count; i++) {
+    let ax, ay, az;
+    
+    if (pattern === "artificial") {
+      // High frequency spikes (artificial pattern)
+      ax = Math.random() * 10000 - 5000;
+      ay = Math.random() * 10000 - 5000;
+      az = Math.random() * 10000 - 5000;
+    } else {
+      // Smooth natural movement
+      ax = Math.sin(Date.now() / 1000 + i) * 500 + (Math.random() * 100 - 50);
+      ay = Math.cos(Date.now() / 1000 + i) * 500 + (Math.random() * 100 - 50);
+      az = Math.sin(Date.now() / 500 + i) * 300 + (Math.random() * 50 - 25);
+    }
+    
+    const magnitude = calculateMotionMagnitude(ax, ay, az);
+    
+    const testData = {
+      time: new Date().toISOString(),
+      ip: "127.0.0.1",
+      ax: ax.toFixed(2),
+      ay: ay.toFixed(2),
+      az: az.toFixed(2),
+      m: magnitude.toFixed(2),
+      r: -55,
+      deviceId: `test-device-${i}`,
+      pattern: pattern
+    };
+    
+    motions.unshift(testData);
+    if (motions.length > 100) motions.pop();
+    
+    generated.push(testData);
+    console.log(`🧪 Test ${pattern} motion #${i+1}: M=${magnitude.toFixed(2)}`);
+  }
+  
+  if (motions.length > 0) motions.pop(); // Remove if too many
+  
+  res.json({
+    ok: true,
+    generated: count,
+    pattern: pattern,
+    total_motions: motions.length,
+    samples: generated
+  });
+});
+
+/**
+ * GET /test/generate-many - Generate many test samples
+ */
+app.get("/test/generate-many", (req, res) => {
+  const count = parseInt(req.query.count || "10", 10);
+  
+  for (let i = 0; i < count; i++) {
+    const ax = Math.random() * 1000 - 500;
+    const ay = Math.random() * 1000 - 500;
+    const az = Math.random() * 500 - 250;
+    const magnitude = calculateMotionMagnitude(ax, ay, az);
+    
+    const entry = {
+      time: new Date(Date.now() - Math.random() * 60000).toISOString(),
+      ip: `192.168.1.${Math.floor(Math.random() * 255)}`,
+      ax: ax.toFixed(2),
+      ay: ay.toFixed(2),
+      az: az.toFixed(2),
+      m: magnitude.toFixed(2),
+      r: -50 - Math.floor(Math.random() * 30),
+      deviceId: `device-${Math.floor(Math.random() * 10)}`
+    };
+    
+    motions.unshift(entry);
+  }
+  
+  if (motions.length > 100) {
+    motions.splice(100);
+  }
+  
+  res.json({
+    ok: true,
+    generated: count,
+    total_motions: motions.length,
+    sample: motions[0]
+  });
+});
+
+/**
+ * GET /test/clear - Clear all motion data
+ */
+app.get("/test/clear", (req, res) => {
+  const count = motions.length;
+  motions.length = 0;
+  mlPredictions.length = 0;
+  
+  res.json({
+    ok: true,
+    cleared_motions: count,
+    cleared_predictions: 0,
+    message: `Cleared ${count} motion records`
+  });
+});
+
+/**
+ * POST /test/artificial-motion - Generate intentional artificial motion patterns
+ * Query params:
+ *   count: number of artificial samples (default: 1)
+ */
+app.post("/test/artificial-motion", (req, res) => {
+  const count = parseInt(req.query.count || "1", 10);
+  const generated = [];
+  
+  for (let i = 0; i < count; i++) {
+    // Generate HIGH-FREQUENCY spikes (artificial pattern)
+    // Artificial motion has:
+    // 1. Very high standard deviation
+    // 2. Rapid changes between high and low values
+    // 3. Inconsistent patterns
+    
+    const isSpike = Math.random() > 0.5;
+    const spike = isSpike ? Math.random() * 20000 : Math.random() * 500;
+    
+    const ax = spike * (Math.random() > 0.5 ? 1 : -1);
+    const ay = spike * (Math.random() > 0.5 ? 1 : -1);
+    const az = spike * 0.5 * (Math.random() > 0.5 ? 1 : -1);
+    const magnitude = calculateMotionMagnitude(ax, ay, az);
+    
+    const testData = {
+      time: new Date().toISOString(),
+      ip: "127.0.0.1",
+      ax: ax.toFixed(2),
+      ay: ay.toFixed(2),
+      az: az.toFixed(2),
+      m: magnitude.toFixed(2),
+      r: -55,
+      deviceId: `artificial-device-${i}`,
+      pattern: "artificial"
+    };
+    
+    motions.unshift(testData);
+    if (motions.length > 100) motions.pop();
+    
+    generated.push(testData);
+    console.log(`⚡ Artificial motion #${i+1}: M=${magnitude.toFixed(2)} (spike=${isSpike})`);
+  }
+  
+  res.json({
+    ok: true,
+    generated: count,
+    pattern: "artificial",
+    total_motions: motions.length,
+    samples: generated,
+    notes: "These samples should be detected as ARTIFICIAL with high confidence"
+  });
+});
+
+/**
+ * POST /test/natural-motion - Generate natural/genuine motion patterns
+ * Query params:
+ *   count: number of natural samples (default: 1)
+ */
+app.post("/test/natural-motion", (req, res) => {
+  const count = parseInt(req.query.count || "1", 10);
+  const generated = [];
+  
+  for (let i = 0; i < count; i++) {
+    // Generate SMOOTH motion (natural pattern)
+    // Natural motion has:
+    // 1. Low standard deviation
+    // 2. Gradual changes
+    // 3. Consistent, predictable patterns
+    
+    const baseX = Math.sin(Date.now() / 3000 + i) * 200;
+    const baseY = Math.cos(Date.now() / 2000 + i) * 200;
+    const baseZ = Math.sin(Date.now() / 4000 + i) * 100;
+    
+    const noise = 20;
+    const ax = baseX + (Math.random() * noise - noise / 2);
+    const ay = baseY + (Math.random() * noise - noise / 2);
+    const az = baseZ + (Math.random() * noise - noise / 2);
+    const magnitude = calculateMotionMagnitude(ax, ay, az);
+    
+    const testData = {
+      time: new Date().toISOString(),
+      ip: "127.0.0.1",
+      ax: ax.toFixed(2),
+      ay: ay.toFixed(2),
+      az: az.toFixed(2),
+      m: magnitude.toFixed(2),
+      r: -55,
+      deviceId: `natural-device-${i}`,
+      pattern: "natural"
+    };
+    
+    motions.unshift(testData);
+    if (motions.length > 100) motions.pop();
+    
+    generated.push(testData);
+    console.log(`🌊 Natural motion #${i+1}: M=${magnitude.toFixed(2)}`);
+  }
+  
+  res.json({
+    ok: true,
+    generated: count,
+    pattern: "natural",
+    total_motions: motions.length,
+    samples: generated,
+    notes: "These samples should be detected as GENUINE with high confidence"
+  });
+});
+
+/**
+ * POST /test/analyze-sequence - Analyze a motion sequence for artificial patterns
+ * Request body:
+ * {
+ *   "sequence": [100, 200, 150, 5000, 4900, 100, 150, ...],
+ *   "count": 20  (optional: generate random sequence of this length)
+ * }
+ */
+app.post("/test/analyze-sequence", (req, res) => {
+  try {
+    const MotionPatternAnalyzer = require('./utils/motionPatternAnalyzer');
+    
+    let sequence = req.body.sequence || [];
+    
+    if (!sequence || sequence.length === 0) {
+      const count = parseInt(req.body.count || "10", 10);
+      // Generate artificial sequence
+      for (let i = 0; i < count; i++) {
+        const spike = Math.random() > 0.5;
+        sequence.push(spike ? Math.random() * 15000 : Math.random() * 500);
+      }
+    }
+    
+    // Analyze the sequence
+    const analysis = MotionPatternAnalyzer._thresholdAnalysis(sequence);
+    
+    res.json({
+      ok: true,
+      analyzed_samples: sequence.length,
+      prediction: analysis,
+      interpretation: {
+        is_artificial: analysis.label === 'Artificial',
+        confidence_percent: (analysis.confidence * 100).toFixed(1),
+        recommended_action: analysis.label === 'Artificial' 
+          ? 'Flag as suspicious motion - manual review recommended'
+          : 'Motion appears genuine - can be used for attendance'
+      }
+    });
+  } catch (error) {
+    console.error('Sequence analysis error:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // ============================================
@@ -423,12 +820,28 @@ app.get("/", (_req, res) => {
           const predTable = document.getElementById('predictionTable');
           predTable.innerHTML = predictions.slice(0, 20).map(p => {
             if (p.status === 'waiting') return '';
+
+            const classification = p.classification || p.label || (
+              p.prediction === 1 || p.prediction === '1'
+                ? 'Artificial'
+                : p.prediction === 0 || p.prediction === '0'
+                  ? 'Genuine'
+                  : '--'
+            );
+            const probability = typeof p.probability === 'number'
+              ? p.probability
+              : (classification === 'Artificial' || classification === '1'
+                ? (p.artificial_probability || 0)
+                : (p.genuine_probability || p.confidence || 0));
+            const bufferSize = p.bufferSize || p.buffer_size || (Array.isArray(p.motionSequence) ? p.motionSequence.length : 0);
+            const timeValue = p.timestamp || p.time || new Date().toISOString();
+
             return '<tr>' +
-              '<td>' + new Date().toLocaleTimeString() + '</td>' +
-              '<td>' + (p.classification || '--') + '</td>' +
+              '<td>' + new Date(timeValue).toLocaleTimeString() + '</td>' +
+              '<td>' + classification + '</td>' +
               '<td>' + ((p.confidence || 0) * 100).toFixed(1) + '%</td>' +
-              '<td>' + ((p.probability || 0) * 100).toFixed(1) + '%</td>' +
-              '<td>' + (p.buffer_size || 0) + '/' + 10 + '</td>' +
+              '<td>' + (probability * 100).toFixed(1) + '%</td>' +
+              '<td>' + bufferSize + '/' + 10 + '</td>' +
             '</tr>';
           }).join('');
 
@@ -471,7 +884,7 @@ app.get('/', (req, res) => {
     name: 'Smart Attendance System API',
     version: '2.0.0',
     features: [
-      'BLE + Gyroscope verification',
+      'BLE + accelerometer verification',
       'Parent notifications',
       'Leave management',
       'Daily attendance summary',
