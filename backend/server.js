@@ -9,6 +9,10 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
+if (!process.env.JWT_SECRET) {
+  throw new Error('Missing required environment variable: JWT_SECRET');
+}
+
 const connectDB = require('./config/database');
 const swaggerSpec = require('./config/swagger');
 const studentRoutes = require('./routes/students');
@@ -228,6 +232,18 @@ function sendToMLServer(data) {
 // Check ML server every 5 seconds
 const http = require('http');
 setInterval(checkMLServer, 5000);
+
+const ABSENT_FINALIZATION_SWEEP_MS = parseInt(process.env.AUTO_ATTENDANCE_SWEEP_INTERVAL_MS || '60000', 10);
+setInterval(async () => {
+  try {
+    const result = await autoAttendanceService.finalizeExpiredAttendanceSessions();
+    if (result && (result.finalized || result.absentCreated)) {
+      console.log('Absent sweep complete:', result);
+    }
+  } catch (error) {
+    console.error('Absent sweep error:', error.message);
+  }
+}, ABSENT_FINALIZATION_SWEEP_MS);
 
 // ============================================
 // Motion Recording Endpoints
@@ -834,6 +850,7 @@ app.get("/", (_req, res) => {
                 ? (p.artificial_probability || 0)
                 : (p.genuine_probability || p.confidence || 0));
             const bufferSize = p.bufferSize || p.buffer_size || (Array.isArray(p.motionSequence) ? p.motionSequence.length : 0);
+            const analysisWindowSize = p.analysisWindowSize || p.analysis_window_size || bufferSize || 0;
             const timeValue = p.timestamp || p.time || new Date().toISOString();
 
             return '<tr>' +
@@ -841,7 +858,7 @@ app.get("/", (_req, res) => {
               '<td>' + classification + '</td>' +
               '<td>' + ((p.confidence || 0) * 100).toFixed(1) + '%</td>' +
               '<td>' + (probability * 100).toFixed(1) + '%</td>' +
-              '<td>' + bufferSize + '/' + 10 + '</td>' +
+              '<td>' + bufferSize + '/' + analysisWindowSize + '</td>' +
             '</tr>';
           }).join('');
 

@@ -80,24 +80,6 @@ export const authAPI = {
     }
   },
 
-  register: async (userData: {
-    name: string;
-    email: string;
-    password: string;
-    role?: string;
-    studentId?: string;
-  }) => {
-    console.log('Registration request:', { ...userData, password: '***' });
-    const response = await fetchWithTimeout(`${API_BASE_URL}/auth/register`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(userData),
-    });
-    return handleResponse(response);
-  },
-
   verify: async (token: string) => {
     const response = await fetchWithTimeout(`${API_BASE_URL}/auth/verify`, {
       method: 'POST',

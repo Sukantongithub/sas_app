@@ -6,7 +6,11 @@ const User = require('../models/User');
 const { requireAuth, requireRoles } = require('../middleware/auth');
 const { validateRequest } = require('../middleware/validate');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  throw new Error('Missing required environment variable: JWT_SECRET');
+}
 const ROLE_VALUES = ['super_admin', 'admin', 'hod', 'staff', 'student', 'parent'];
 
 // Generate JWT token
@@ -17,62 +21,6 @@ const generateToken = (userId) => {
     { expiresIn: process.env.JWT_EXPIRES_IN || '30d' }
   );
 };
-
-// Register new user
-router.post('/register',
-  [
-    body('name').notEmpty().withMessage('Name is required'),
-    body('email').isEmail().withMessage('Valid email is required'),
-    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
-    body('role').optional().isIn(ROLE_VALUES).withMessage('Invalid role'),
-  ],
-  validateRequest,
-  async (req, res) => {
-    try {
-      const { name, email, password, role } = req.body;
-
-      const requestedRole = role || 'student';
-
-      // Check if user already exists
-      const existingUser = await User.findOne({ email });
-      if (existingUser) {
-        return res.status(400).json({ message: 'User already exists with this email' });
-      }
-
-      // Create new user (studentId will be linked later if needed)
-      const user = new User({
-        name,
-        email,
-        password,
-        role: requestedRole
-      });
-
-      await user.save();
-
-      res.status(201).json({
-        message: 'User registered successfully',
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          role: user.role
-        }
-      });
-    } catch (error) {
-      // Handle validation errors
-      if (error.name === 'ValidationError') {
-        const messages = Object.values(error.errors).map(err => err.message);
-        return res.status(400).json({ message: messages.join(', ') });
-      }
-
-      // Handle duplicate email
-      if (error.code === 11000) {
-        return res.status(400).json({ message: 'User already exists with this email' });
-      }
-
-      res.status(400).json({ message: error.message });
-    }
-  });
 
 // Login
 router.post('/login',

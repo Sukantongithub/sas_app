@@ -46,10 +46,18 @@ export default function UserManagementScreen() {
   const [filterRole, setFilterRole] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [studentUsers, setStudentUsers] = useState<User[]>([]);
+  const [selectedStudentUserId, setSelectedStudentUserId] = useState('');
+  const [deviceIdInput, setDeviceIdInput] = useState('');
+  const [assigningDevice, setAssigningDevice] = useState(false);
 
   useEffect(() => {
     fetchUsers();
   }, [token, filterRole, filterStatus, searchQuery]);
+
+  useEffect(() => {
+    fetchStudentUsers();
+  }, [token]);
 
   const fetchUsers = async () => {
     try {
@@ -71,6 +79,73 @@ export default function UserManagementScreen() {
       Alert.alert('Error', error.message || 'Failed to load users');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchStudentUsers = async () => {
+    if (!token) return;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/users?role=student&isActive=true`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) throw new Error('Failed to fetch students for device mapping');
+
+      const result = await response.json();
+      const items = Array.isArray(result?.data) ? result.data : [];
+      setStudentUsers(items);
+
+      if (!selectedStudentUserId && items.length > 0) {
+        setSelectedStudentUserId(items[0]._id);
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to fetch students');
+    }
+  };
+
+  const handleAssignDevice = async () => {
+    const normalizedDeviceId = String(deviceIdInput || '').trim().toUpperCase().replace(/[:-]/g, '');
+
+    if (!selectedStudentUserId) {
+      Alert.alert('Validation', 'Please select a student user');
+      return;
+    }
+
+    if (!normalizedDeviceId) {
+      Alert.alert('Validation', 'Please enter a valid Device ID');
+      return;
+    }
+
+    try {
+      setAssigningDevice(true);
+      const response = await fetch(`${API_BASE_URL}/admin/devices/assign`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: selectedStudentUserId,
+          deviceId: normalizedDeviceId,
+          hardwareModel: 'ESP32-C3',
+          imuModel: 'other',
+          firmwareVersion: '1.0.0',
+          txPower: -59,
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.message || 'Failed to assign device');
+      }
+
+      Alert.alert('Success', `Device ${normalizedDeviceId} mapped successfully`);
+      setDeviceIdInput('');
+    } catch (error: any) {
+      Alert.alert('Device Mapping Failed', error.message || 'Unable to map device');
+    } finally {
+      setAssigningDevice(false);
     }
   };
 
@@ -157,6 +232,54 @@ export default function UserManagementScreen() {
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <ThemedText style={styles.subtitle}>Total: {users.length} users</ThemedText>
+        </View>
+
+        <View style={[styles.mappingContainer, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+          <ThemedText type="defaultSemiBold" style={styles.mappingTitle}>Quick Device Mapping</ThemedText>
+          <ThemedText lightColor={colors.textSecondary} darkColor={colors.textSecondary} style={styles.mappingHint}>
+            Select a student and map a hardware Device ID
+          </ThemedText>
+
+          <ThemedText lightColor={colors.textSecondary} darkColor={colors.textSecondary} style={styles.filterLabel}>Student</ThemedText>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
+            {studentUsers.map((student) => (
+              <TouchableOpacity
+                key={student._id}
+                style={[
+                  styles.filterButton,
+                  { borderColor: colors.border },
+                  selectedStudentUserId === student._id && { backgroundColor: colors.tint, borderColor: colors.tint },
+                ]}
+                onPress={() => setSelectedStudentUserId(student._id)}>
+                <ThemedText style={[styles.filterButtonText, selectedStudentUserId === student._id && { color: '#FFFFFF' }]}>
+                  {student.name}
+                </ThemedText>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          <ThemedText lightColor={colors.textSecondary} darkColor={colors.textSecondary} style={styles.filterLabel}>Device ID</ThemedText>
+          <View style={[styles.searchContainer, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+            <TextInput
+              style={[styles.searchInput, { color: colors.text }]}
+              placeholder="Example: ID_001"
+              placeholderTextColor={colors.textSecondary}
+              autoCapitalize="characters"
+              value={deviceIdInput}
+              onChangeText={setDeviceIdInput}
+            />
+          </View>
+
+          <TouchableOpacity
+            style={[styles.assignButton, { backgroundColor: colors.tint }, assigningDevice && { opacity: 0.7 }]}
+            disabled={assigningDevice}
+            onPress={handleAssignDevice}>
+            {assigningDevice ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <ThemedText style={styles.assignButtonText}>Save Device Mapping</ThemedText>
+            )}
+          </TouchableOpacity>
         </View>
 
         {/* Search Bar */}
@@ -352,6 +475,20 @@ const styles = StyleSheet.create({
   header: {
     marginBottom: 24,
   },
+  mappingContainer: {
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+  },
+  mappingTitle: {
+    fontSize: 17,
+    marginBottom: 6,
+  },
+  mappingHint: {
+    fontSize: 13,
+    marginBottom: 8,
+  },
   subtitle: {
     fontSize: 15,
     marginTop: 6,
@@ -365,6 +502,18 @@ const styles = StyleSheet.create({
   searchInput: {
     fontSize: 15,
     padding: 4,
+  },
+  assignButton: {
+    marginTop: 6,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+  },
+  assignButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   filterContainer: {
     padding: 16,

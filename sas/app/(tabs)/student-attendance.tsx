@@ -15,10 +15,21 @@ interface DailyRecord {
   _id: string;
   date: string;
   subject?: string;
-  entryTime?: Date;
-  exitTime?: Date;
+  entryTime?: Date | string;
+  exitTime?: Date | string;
   status: AttendanceStatus;
   verificationMethod?: string;
+  periodInfo?: {
+    periodNumber?: number;
+    scheduledStartTime?: string;
+    scheduledEndTime?: string;
+  };
+  sessionId?: {
+    subject?: string;
+    startTime?: string | Date;
+    endTime?: string | Date;
+    periodNumber?: number;
+  };
 }
 
 interface SubjectStats {
@@ -174,7 +185,41 @@ export default function StudentAttendanceScreen() {
   const formatTime = (time?: Date | string) => {
     if (!time) return 'N/A';
     const date = new Date(time);
+    if (Number.isNaN(date.getTime())) return String(time);
     return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const formatClockText = (timeText?: string) => {
+    if (!timeText || !/^\d{1,2}:\d{2}$/.test(timeText)) return null;
+    const [h, m] = timeText.split(':').map((v) => parseInt(v, 10));
+    const hour12 = ((h + 11) % 12) + 1;
+    const suffix = h >= 12 ? 'PM' : 'AM';
+    return `${hour12.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} ${suffix}`;
+  };
+
+  const getPeriodLabel = (record: DailyRecord, index: number) => {
+    return (
+      record.subject ||
+      record.sessionId?.subject ||
+      (record.periodInfo?.periodNumber ? `Period ${record.periodInfo.periodNumber}` : undefined) ||
+      (record.sessionId?.periodNumber ? `Period ${record.sessionId.periodNumber}` : undefined) ||
+      `Period ${index + 1}`
+    );
+  };
+
+  const getPeriodTimeRange = (record: DailyRecord) => {
+    const scheduledStart = formatClockText(record.periodInfo?.scheduledStartTime);
+    const scheduledEnd = formatClockText(record.periodInfo?.scheduledEndTime);
+
+    if (scheduledStart && scheduledEnd) {
+      return `${scheduledStart} - ${scheduledEnd}`;
+    }
+
+    if (record.sessionId?.startTime && record.sessionId?.endTime) {
+      return `${formatTime(record.sessionId.startTime)} - ${formatTime(record.sessionId.endTime)}`;
+    }
+
+    return `${formatTime(record.entryTime)}${record.exitTime ? ` - ${formatTime(record.exitTime)}` : ''}`;
   };
 
   const formatDuration = (minutes?: number) => {
@@ -216,9 +261,9 @@ export default function StudentAttendanceScreen() {
           <ThemedView key={record._id} style={styles.recordCard}>
             <View style={styles.recordHeader}>
               <View>
-                <ThemedText type="defaultSemiBold">{record.subject || `Period ${index + 1}`}</ThemedText>
+                <ThemedText type="defaultSemiBold">{getPeriodLabel(record, index)}</ThemedText>
                 <ThemedText style={styles.recordTime}>
-                  {formatTime(record.entryTime)} {record.exitTime ? `- ${formatTime(record.exitTime)}` : ''}
+                  {getPeriodTimeRange(record)}
                 </ThemedText>
               </View>
               <View style={[styles.statusBadge, { backgroundColor: getStatusColor(record.status) }]}>
@@ -474,15 +519,16 @@ export default function StudentAttendanceScreen() {
               tintColor={Colors[colorScheme ?? 'light'].tint}
             />
           }
-          renderItem={({ item }) => {
+          renderItem={({ item, index }) => {
             if (activeTab === 'day' && item) {
+              const dailyRecord = item as DailyRecord;
               return (
                 <ThemedView style={[styles.recordCard, { marginHorizontal: 16 }]}>
                   <View style={styles.recordHeader}>
                     <View>
-                      <ThemedText type="defaultSemiBold">{item.subject || 'Period'}</ThemedText>
+                      <ThemedText type="defaultSemiBold">{getPeriodLabel(dailyRecord, index)}</ThemedText>
                       <ThemedText style={styles.recordTime}>
-                        {formatTime(item.entryTime)} {item.exitTime ? `- ${formatTime(item.exitTime)}` : ''}
+                        {getPeriodTimeRange(dailyRecord)}
                       </ThemedText>
                     </View>
                     <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>

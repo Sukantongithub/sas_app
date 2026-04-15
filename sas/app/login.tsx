@@ -7,7 +7,6 @@ import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { router } from 'expo-router';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
 export default function LoginScreen() {
@@ -131,16 +130,6 @@ export default function LoginScreen() {
             </LinearGradient>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.registerLink}
-            onPress={() => router.push('/register')}>
-            <ThemedText style={[styles.registerText, { color: Colors[colorScheme ?? 'light'].textSecondary }]}>
-              Don't have an account?{' '}
-              <ThemedText style={[styles.registerTextBold, { color: Colors[colorScheme ?? 'light'].tint }]}>
-                Register
-              </ThemedText>
-            </ThemedText>
-          </TouchableOpacity>
         </View>
       </View>
     </ThemedView>
@@ -242,16 +231,5 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     letterSpacing: 0.5,
-  },
-  registerLink: {
-    marginTop: 24,
-    alignItems: 'center',
-  },
-  registerText: {
-    fontSize: 14,
-    opacity: 0.8,
-  },
-  registerTextBold: {
-    fontWeight: '600',
   },
 });

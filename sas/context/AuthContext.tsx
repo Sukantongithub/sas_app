@@ -10,7 +10,6 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  register: (userData: any) => Promise<void>;
   resetNavigation: () => Promise<void>;
 }
 
@@ -188,17 +187,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const register = async (userData: any) => {
-    try {
-      setLoading(true);
-      await authAPI.register(userData);
-    } catch (error: any) {
-      throw new Error(error.message || 'Registration failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <AuthContext.Provider
       value={{
@@ -208,7 +196,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         login,
         logout,
-        register,
         resetNavigation,
       }}>
       {children}

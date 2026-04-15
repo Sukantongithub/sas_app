@@ -73,17 +73,17 @@ function RootLayoutNav() {
       isAdmin
     });
 
-    if (!isAuthenticated && segments[0] !== 'login' && segments[0] !== 'register') {
+    if (!isAuthenticated && segments[0] !== 'login') {
       // Redirect to login if not authenticated
       console.log('_layout: Not authenticated, redirecting to login');
       router.replace('/login');
-    } else if (isAuthenticated && (segments[0] === 'login' || segments[0] === 'register')) {
+    } else if (isAuthenticated && segments[0] === 'login') {
       // Redirect to appropriate dashboard based on role
       if (isAdmin) {
-        console.log('_layout: Authenticated admin on login/register, redirecting to admin');
+        console.log('_layout: Authenticated admin on login, redirecting to admin');
         router.replace('/admin');
       } else {
-        console.log('_layout: Authenticated user on login/register, redirecting to first role tab');
+        console.log('_layout: Authenticated user on login, redirecting to first role tab');
         router.replace(getTabPath(firstTab) as any);
       }
     } else if (isAuthenticated && isAdmin && inTabsGroup) {
@@ -101,7 +101,6 @@ function RootLayoutNav() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
         <Stack.Screen name="login" options={{ headerShown: false }} />
-        <Stack.Screen name="register" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="admin" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />

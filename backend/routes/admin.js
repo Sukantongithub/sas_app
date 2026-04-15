@@ -19,7 +19,11 @@ const { validateRequest } = require('../middleware/validate');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  throw new Error('Missing required environment variable: JWT_SECRET');
+}
 
 const excelUpload = multer({
   storage: multer.memoryStorage(),
@@ -2802,7 +2806,7 @@ router.post('/devices/assign', requireAuth, requireRoles('super_admin', 'admin')
         isOnline: false,
         registeredAt: new Date(),
         lastSeen: new Date(),
-        pairedBy: req.userId,
+        pairedBy: req.user?._id,
       },
       { upsert: true, new: true, runValidators: true }
     );
