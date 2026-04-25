@@ -33,6 +33,12 @@ function buildDateKey(date = new Date()) {
   return new Date(date).toISOString().split('T')[0];
 }
 
+function buildDateOnlyDate(date = new Date()) {
+  const value = new Date(date);
+  value.setUTCHours(0, 0, 0, 0);
+  return value;
+}
+
 function getDayOfWeek(date = new Date()) {
   return ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][date.getDay()];
 }
@@ -258,6 +264,7 @@ async function closeAttendanceIfPeriodEnded(attendance, session, currentDate) {
 
 async function ensureSessionForPeriod({ classDoc, period, currentDate }) {
   const dateKey = buildDateKey(currentDate);
+  const dateValue = buildDateOnlyDate(currentDate);
   const startTime = parseTimeToDate(dateKey, period.startTime);
   const endTime = parseTimeToDate(dateKey, period.endTime);
   const facultyId = period.teacherId || classDoc.faculty?.[0] || classDoc.coordinator;
@@ -268,7 +275,7 @@ async function ensureSessionForPeriod({ classDoc, period, currentDate }) {
 
   let session = await Session.findOne({
     classId: classDoc._id,
-    date: dateKey,
+    date: dateValue,
     startTime,
     endTime
   });
@@ -280,7 +287,7 @@ async function ensureSessionForPeriod({ classDoc, period, currentDate }) {
       subject: period.subject,
       subjectCode: period.subjectCode,
       sessionType: period.isLab ? 'lab' : 'lecture',
-      date: dateKey,
+      date: dateValue,
       startTime,
       endTime,
       isActive: true,
@@ -698,7 +705,7 @@ async function processMotionReading(payload) {
       studentId: student._id,
       sessionId: session._id,
       classId: classDoc._id,
-      date: buildDateKey(currentDate),
+      date: buildDateOnlyDate(currentDate),
       entryTime: currentDate,
       exitTime: null,
       status: 'excused',
@@ -799,7 +806,7 @@ async function processMotionReading(payload) {
       studentId: student._id,
       sessionId: session._id,
       classId: classDoc._id,
-      date: buildDateKey(currentDate),
+      date: buildDateOnlyDate(currentDate),
       entryTime: currentDate,
       exitTime: null,
       status: 'excused',
@@ -852,6 +859,13 @@ async function processMotionReading(payload) {
     return result;
   }
 
+  // Final boundary check: if marking occurs after session end, reject instead of marking late
+  if (currentDate > session.endTime) {
+    result.analysis.autoMarkEligible = false;
+    result.analysis.reason = 'session_ended_no_live_mark';
+    return result;
+  }
+
   const lateThresholdMinutes = parseInt(process.env.MOTION_LATE_GRACE_MINUTES || '3', 10);
   const periodStart = parseTimeToDate(buildDateKey(currentDate), period.startTime);
   const minutesSinceStart = Math.max(0, Math.round((currentDate - periodStart) / 60000));
@@ -861,7 +875,7 @@ async function processMotionReading(payload) {
     studentId: student._id,
     sessionId: session._id,
     classId: classDoc._id,
-    date: buildDateKey(currentDate),
+    date: buildDateOnlyDate(currentDate),
     entryTime: currentDate,
     exitTime: null,
     status,
